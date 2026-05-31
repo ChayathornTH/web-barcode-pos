@@ -155,7 +155,7 @@ export default function PosView({
     <div style={styles.viewContainer}>
       <div style={styles.header}>
         <div>
-          <h2 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>Point of Sale Terminal</h2>
+          <h2 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>POS Terminal</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
             Scan barcodes using camera or USB reader, adjust quantities, and checkout.
           </p>
@@ -180,10 +180,10 @@ export default function PosView({
         </div>
       </div>
 
-      <div style={styles.posGrid}>
+      <div className="pos-grid">
         
         {/* Left Side: Scanning & Inputs */}
-        <div style={styles.leftCol}>
+        <div className="pos-left-col">
           
           {/* Scanner view */}
           {isCameraActive && (
@@ -261,7 +261,7 @@ export default function PosView({
             ) : (
               <div style={styles.cartList}>
                 {cart.map((item) => (
-                  <div key={item.id} className="item-row" style={styles.cartRow}>
+                  <div key={item.id} className="item-row cart-row">
                     <div style={styles.itemInfo}>
                       <span style={styles.itemEmoji}>{item.emoji}</span>
                       <div style={{ minWidth: 0 }}>
@@ -274,24 +274,26 @@ export default function PosView({
                       </div>
                     </div>
 
-                    <div style={styles.qtyActions}>
-                      <button 
-                        style={styles.qtyBtn} 
-                        onClick={() => onUpdateCartQty(item.id, item.quantity - 1)}
-                      >
-                        <Minus size={12} />
-                      </button>
-                      <span style={styles.qtyCount}>{item.quantity}</span>
-                      <button 
-                        style={styles.qtyBtn} 
-                        onClick={() => onUpdateCartQty(item.id, item.quantity + 1)}
-                      >
-                        <Plus size={12} />
-                      </button>
-                    </div>
+                    <div className="qty-actions-wrapper">
+                      <div style={styles.qtyActions}>
+                        <button 
+                          style={styles.qtyBtn} 
+                          onClick={() => onUpdateCartQty(item.id, item.quantity - 1)}
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <span style={styles.qtyCount}>{item.quantity}</span>
+                        <button 
+                          style={styles.qtyBtn} 
+                          onClick={() => onUpdateCartQty(item.id, item.quantity + 1)}
+                        >
+                          <Plus size={12} />
+                        </button>
+                      </div>
 
-                    <div style={styles.itemSubtotal}>
-                      ${(item.price * item.quantity).toFixed(2)}
+                      <div className="item-subtotal" style={styles.itemSubtotal}>
+                        ${(item.price * item.quantity).toFixed(2)}
+                      </div>
                     </div>
 
                     <button 
@@ -309,7 +311,7 @@ export default function PosView({
         </div>
 
         {/* Right Side: Totals & Checkout actions */}
-        <div style={styles.rightCol}>
+        <div className="pos-right-col">
           <div className="glass-panel" style={styles.summaryCard}>
             <h3 style={styles.cardTitle}>Bill Summary</h3>
             
@@ -481,10 +483,10 @@ export default function PosView({
 
             <div style={styles.receiptActions}>
               <button className="btn btn-secondary" onClick={handlePrintReceipt}>
-                <Printer size={16} /> Print Receipt
+                <Printer size={16} /> Print
               </button>
               <button className="btn btn-success" onClick={handleNewSale} style={{ flexGrow: 1 }}>
-                <CheckCircle size={16} /> New Transaction
+                <CheckCircle size={16} /> New Sale
               </button>
             </div>
           </div>
@@ -510,26 +512,6 @@ const styles = {
   controlsRow: {
     display: 'flex',
     gap: '0.75rem',
-  },
-  posGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 340px',
-    gap: '1.5rem',
-    alignItems: 'start',
-  },
-  '@media (max-width: 900px)': {
-    posGrid: {
-      gridTemplateColumns: '1fr',
-    }
-  },
-  leftCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1.25rem',
-  },
-  rightCol: {
-    position: 'sticky',
-    top: '2rem',
   },
   scanFormCard: {
     padding: '1.25rem',
@@ -609,16 +591,6 @@ const styles = {
     gap: '0.75rem',
     marginTop: '0.5rem',
   },
-  cartRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-    padding: '0.85rem 1rem',
-    borderRadius: '8px',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid var(--border-color)',
-    transition: 'border-color var(--transition-fast)',
-  },
   itemInfo: {
     display: 'flex',
     alignItems: 'center',
@@ -673,19 +645,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'background var(--transition-fast)',
-  },
-  qtyBtn: {
-    width: '24px',
-    height: '24px',
-    borderRadius: '4px',
-    border: 'none',
-    background: 'transparent',
-    color: 'var(--text-primary)',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   qtyCount: {
     fontSize: '0.85rem',
@@ -707,7 +666,6 @@ const styles = {
     cursor: 'pointer',
     padding: '0.25rem',
     borderRadius: '4px',
-    transition: 'color var(--transition-fast)',
   },
   summaryCard: {
     padding: '1.5rem',

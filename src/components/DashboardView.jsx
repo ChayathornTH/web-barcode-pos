@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, FileText, ShoppingBag, TrendingUp, Calendar, ArrowUpRight, Barcode, Eye, Printer, X } from 'lucide-react';
+import { DollarSign, FileText, ShoppingBag, TrendingUp, Calendar, ArrowUpRight, Eye, Printer, X } from 'lucide-react';
 
 export default function DashboardView({ salesHistory }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
@@ -13,7 +13,6 @@ export default function DashboardView({ salesHistory }) {
   const averageTicket = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
 
   // Group Sales by Hour for hourly chart
-  // Standard hours: 09:00 - 21:00 (12 hours representation)
   const hourlyBuckets = Array.from({ length: 13 }, (_, i) => ({
     hour: i + 9, // 9am to 9pm
     label: `${i + 9 > 12 ? i + 9 - 12 : i + 9}${i + 9 >= 12 ? 'PM' : 'AM'}`,
@@ -21,9 +20,7 @@ export default function DashboardView({ salesHistory }) {
   }));
 
   salesHistory.forEach(sale => {
-    // Parse time if possible, otherwise assign to random hour for mock demonstration
-    // Standard format from new Date().toLocaleString(): e.g., "6/1/2026, 12:04:15 AM"
-    let hour = 12; // fallback
+    let hour = 12;
     try {
       const timeStr = sale.timestamp.split(',')[1]?.trim();
       if (timeStr) {
@@ -39,18 +36,15 @@ export default function DashboardView({ salesHistory }) {
       hour = 12;
     }
     
-    // Add to bucket if between 9am and 9pm
     const bucket = hourlyBuckets.find(b => b.hour === hour);
     if (bucket) {
       bucket.amount += sale.total;
     } else {
-      // Put in nearest bucket
       if (hour < 9) hourlyBuckets[0].amount += sale.total;
       else hourlyBuckets[12].amount += sale.total;
     }
   });
 
-  // Find max hourly sales to scale the SVG chart
   const maxHourlySales = Math.max(...hourlyBuckets.map(b => b.amount), 50);
 
   // Category Distribution
@@ -82,7 +76,7 @@ export default function DashboardView({ salesHistory }) {
       </div>
 
       {/* Numerical Stats Cards */}
-      <div style={styles.statsGrid}>
+      <div className="stats-grid">
         
         <div className="glass-panel" style={styles.statCard}>
           <div style={styles.statHeader}>
@@ -121,7 +115,7 @@ export default function DashboardView({ salesHistory }) {
           </div>
           <div style={styles.statValue}>{totalItemsSold}</div>
           <div style={styles.statTrend}>
-            <span style={{ color: 'var(--text-secondary)' }}>Avg: {(totalItemsSold / (totalTransactions || 1)).toFixed(1)} per ticket</span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Avg: {(totalItemsSold / (totalTransactions || 1)).toFixed(1)} / tickets</span>
           </div>
         </div>
 
@@ -130,18 +124,18 @@ export default function DashboardView({ salesHistory }) {
             <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
               <TrendingUp size={20} />
             </div>
-            <span style={styles.statLabel}>Avg Ticket Size</span>
+            <span style={styles.statLabel}>Avg Ticket</span>
           </div>
           <div style={styles.statValue}>${averageTicket.toFixed(2)}</div>
           <div style={styles.statTrend}>
-            <span style={{ color: 'var(--text-secondary)' }}>Total basket value avg</span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Total basket value avg</span>
           </div>
         </div>
 
       </div>
 
       {/* Visual Charts Grid */}
-      <div style={styles.chartsGrid}>
+      <div className="charts-grid">
         
         {/* Hourly sales distribution (Custom SVG) */}
         <div className="glass-panel" style={styles.chartCard}>
@@ -149,7 +143,6 @@ export default function DashboardView({ salesHistory }) {
           
           <div style={styles.svgContainer}>
             <svg width="100%" height="220" style={{ overflow: 'visible' }}>
-              {/* Grid Lines */}
               {[0, 0.25, 0.5, 0.75, 1].map((ratio, index) => {
                 const y = 180 - ratio * 150;
                 const value = Math.round(maxHourlySales * ratio);
@@ -161,37 +154,31 @@ export default function DashboardView({ salesHistory }) {
                 );
               })}
 
-              {/* Bars */}
               {hourlyBuckets.map((bucket, index) => {
-                const barWidth = 24;
-                const barGap = 16;
-                // Calculate spacing dynamically based on svg width
-                // We use standard coordinates for simplicity, SVG scales beautifully
-                const x = 50 + index * 40;
+                const barWidth = 14; // narrower to fit screens
+                const x = 45 + index * 26; // tighter step to avoid layout overflow on mobile
                 const barHeight = (bucket.amount / maxHourlySales) * 150;
                 const y = 180 - barHeight;
                 const isHovered = bucket.amount > 0;
 
                 return (
                   <g key={index}>
-                    {/* Bar rectangle with gradient colors */}
                     <rect
                       x={x}
                       y={y}
                       width={barWidth}
                       height={Math.max(barHeight, 2)}
-                      rx="4"
+                      rx="2"
                       fill={isHovered ? 'url(#barGradient)' : 'var(--border-color)'}
                       style={{ transition: 'all 0.3s ease' }}
                     />
                     
-                    {/* Hover text value */}
                     {bucket.amount > 0 && (
                       <text 
                         x={x + barWidth/2} 
                         y={y - 8} 
                         fill="var(--text-primary)" 
-                        fontSize="9" 
+                        fontSize="8" 
                         fontWeight="700"
                         textAnchor="middle"
                       >
@@ -199,12 +186,11 @@ export default function DashboardView({ salesHistory }) {
                       </text>
                     )}
 
-                    {/* X Axis labels */}
                     <text
                       x={x + barWidth/2}
                       y="198"
                       fill="var(--text-muted)"
-                      fontSize="9"
+                      fontSize="8"
                       textAnchor="middle"
                     >
                       {bucket.label}
@@ -213,7 +199,6 @@ export default function DashboardView({ salesHistory }) {
                 );
               })}
 
-              {/* Gradients */}
               <defs>
                 <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--primary)" />
@@ -242,7 +227,6 @@ export default function DashboardView({ salesHistory }) {
                       ${cat.amount.toFixed(2)} ({Math.round(cat.percent)}%)
                     </span>
                   </div>
-                  {/* Progress bar container */}
                   <div style={styles.barTrack}>
                     <div style={{
                       ...styles.barFill,
@@ -275,9 +259,9 @@ export default function DashboardView({ salesHistory }) {
                 <tr style={styles.thRow}>
                   <th style={styles.th}>Receipt ID</th>
                   <th style={styles.th}>Date & Time</th>
-                  <th style={styles.th}>Items Count</th>
+                  <th style={styles.th}>Items</th>
                   <th style={styles.th}>Discount</th>
-                  <th style={styles.th}>Total Revenue</th>
+                  <th style={styles.th}>Total</th>
                   <th style={{ ...styles.th, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
@@ -305,7 +289,7 @@ export default function DashboardView({ salesHistory }) {
                           style={styles.viewInvoiceBtn}
                           onClick={() => setSelectedReceipt(sale)}
                         >
-                          <Eye size={12} /> View Receipt
+                          <Eye size={12} /> View
                         </button>
                       </td>
                     </tr>
@@ -317,7 +301,7 @@ export default function DashboardView({ salesHistory }) {
         )}
       </div>
 
-      {/* Receipts Popup Modal (historical lookup view) */}
+      {/* Receipts Popup Modal */}
       {selectedReceipt && (
         <div style={styles.modalOverlay}>
           <div className="glass-panel" style={styles.receiptContainer}>
@@ -430,11 +414,6 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '1.25rem',
-  },
   statCard: {
     padding: '1.25rem',
     display: 'flex',
@@ -471,16 +450,6 @@ const styles = {
     gap: '0.25rem',
     fontSize: '0.75rem',
     color: 'var(--text-muted)',
-  },
-  chartsGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '1.5rem',
-  },
-  '@media (max-width: 900px)': {
-    chartsGrid: {
-      gridTemplateColumns: '1fr',
-    }
   },
   chartCard: {
     padding: '1.5rem',
@@ -565,9 +534,6 @@ const styles = {
   tr: {
     borderBottom: '1px solid var(--border-color)',
     transition: 'background var(--transition-fast)',
-    '&:hover': {
-      backgroundColor: 'rgba(255,255,255,0.01)',
-    }
   },
   td: {
     padding: '1rem',

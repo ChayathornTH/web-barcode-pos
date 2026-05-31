@@ -179,10 +179,10 @@ export default function App() {
 
     const item = cart.find(c => c.id === id);
     const prod = products.find(p => p.id === id);
-    const qtyDiff = newQty - item.quantity;
+    const _qtyDiff = newQty - item.quantity;
 
     // Check inventory levels
-    if (prod && prod.stock < qtyDiff) {
+    if (prod && prod.stock < _qtyDiff) {
       addToast(`Cannot add more. Only ${prod.stock} items left in stock.`, 'warning');
       return;
     }
@@ -191,7 +191,7 @@ export default function App() {
     setCart((prev) => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
     
     // Update inventory
-    setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: p.stock - qtyDiff } : p));
+    setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: p.stock - _qtyDiff } : p));
   };
 
   const handleRemoveFromCart = (id) => {
@@ -228,7 +228,7 @@ export default function App() {
   // Checkout simulation logger
   const handleCheckout = (receipt) => {
     setSalesHistory((prev) => [receipt, ...prev]);
-    setCart([]); // Reset cart (already decremented stock on scans)
+    setCart([]);
     setLastScannedItem(null);
     addToast(`Transaction ${receipt.id} processed successfully!`, 'success');
   };
@@ -237,16 +237,16 @@ export default function App() {
     <div className="app-container">
       
       {/* Sidebar Navigation */}
-      <aside className="glass-panel" style={styles.sidebar}>
+      <aside className="app-sidebar glass-panel">
         <div style={styles.sidebarBrand}>
           <div style={styles.brandLogo}>⚡</div>
-          <div>
+          <div className="sidebar-brand-name">
             <h1 style={styles.brandTitle}>OmniScan POS</h1>
             <span style={styles.brandSubtitle}>Retail Management v1.2</span>
           </div>
         </div>
 
-        <nav style={styles.nav}>
+        <nav className="app-sidebar-nav">
           <button 
             className={`btn ${activeView === 'terminal' ? 'btn-primary glow-primary' : 'btn-secondary'}`}
             style={styles.navBtn}
@@ -263,7 +263,7 @@ export default function App() {
           >
             <Database size={18} />
             <span>Product Inventory</span>
-            <span style={styles.badge}>{products.length}</span>
+            <span className="badge">{products.length}</span>
           </button>
 
           <button 
@@ -277,7 +277,7 @@ export default function App() {
         </nav>
 
         {/* Global Wedge Active status indicator */}
-        <div className="glass-panel" style={styles.statusBox}>
+        <div className="sidebar-status-box glass-panel">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
             <span className="pulse-primary" style={styles.statusDot}></span>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--success)' }}>SYSTEM LISTENING</span>
@@ -287,7 +287,7 @@ export default function App() {
           </p>
         </div>
 
-        <div style={styles.sidebarFooter}>
+        <div className="sidebar-footer" style={styles.sidebarFooter}>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Created by Antigravity AI</p>
         </div>
       </aside>
@@ -353,16 +353,6 @@ export default function App() {
 }
 
 const styles = {
-  sidebar: {
-    padding: '2rem 1.5rem',
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100vh',
-    borderRadius: '0',
-    borderRight: '1px solid var(--border-color)',
-    position: 'sticky',
-    top: 0,
-  },
   sidebarBrand: {
     display: 'flex',
     alignItems: 'center',
@@ -394,34 +384,12 @@ const styles = {
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
-  nav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.75rem',
-    flexGrow: 1,
-  },
   navBtn: {
     width: '100%',
     justifyContent: 'flex-start',
     padding: '0.85rem 1rem',
     fontSize: '0.9rem',
     position: 'relative',
-  },
-  badge: {
-    marginLeft: 'auto',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    border: '1px solid var(--border-color)',
-    borderRadius: '12px',
-    padding: '0.15rem 0.5rem',
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    color: 'var(--text-secondary)',
-  },
-  statusBox: {
-    padding: '1rem',
-    background: 'rgba(0,0,0,0.15)',
-    marginTop: 'auto',
-    marginBottom: '1.5rem',
   },
   statusDot: {
     width: '6px',
