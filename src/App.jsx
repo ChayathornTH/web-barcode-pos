@@ -296,6 +296,7 @@ export default function App() {
       <main className="main-content">
         {activeView === 'terminal' && (
           <PosView 
+            products={products}
             cart={cart}
             onUpdateCartQty={handleUpdateCartQty}
             onRemoveFromCart={handleRemoveFromCart}

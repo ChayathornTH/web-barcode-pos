@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShoppingCart, Camera, CameraOff, Volume2, VolumeX, Barcode, CornerDownLeft, Sparkles, Plus, Minus, Trash2, Printer, CheckCircle, RefreshCcw } from 'lucide-react';
-import Scanner from './Scanner';
+import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Sparkles, Plus, Minus, Trash2, Printer, CheckCircle, Grid, Filter } from 'lucide-react';
+
+const CATEGORIES = ['All', 'Paintings', 'Prints', 'Stickers', 'Accessories', 'Stationery'];
 
 export default function PosView({ 
+  products,
   cart, 
   onUpdateCartQty, 
   onRemoveFromCart, 
@@ -11,8 +13,11 @@ export default function PosView({
   onCheckout,
   lastScannedItem 
 }) {
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [activeMobileTab, setActiveMobileTab] = useState('catalog'); // 'catalog' | 'cart'
+  
   const [manualCode, setManualCode] = useState('');
-  const [isCameraActive, setIsCameraActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [discountCode, setDiscountCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState({ code: '', percent: 0 });
@@ -24,14 +29,7 @@ export default function PosView({
   
   const manualInputRef = useRef(null);
 
-  // Focus manual input on load
-  useEffect(() => {
-    if (manualInputRef.current) {
-      manualInputRef.current.focus();
-    }
-  }, []);
-
-  // Play audio beep
+  // Play audio beep on scan success
   const playBeep = () => {
     if (isMuted) return;
     try {
@@ -71,6 +69,12 @@ export default function PosView({
     }
   };
 
+  // Handle product click in catalog (Simulates a fast barcode scan)
+  const handleProductClick = (product) => {
+    if (product.stock === 0) return;
+    onManualScan(product.barcode);
+  };
+
   // Promo Code Handler
   const handleApplyPromo = (e) => {
     e.preventDefault();
@@ -84,6 +88,9 @@ export default function PosView({
       setDiscountCode('');
     } else if (code === 'SUPERFOOD') {
       setAppliedDiscount({ code: 'SUPERFOOD (15%)', percent: 15 });
+      setDiscountCode('');
+    } else if (code === 'ARTFEST') {
+      setAppliedDiscount({ code: 'ARTFEST (20%)', percent: 20 });
       setDiscountCode('');
     } else if (code === 'FREESHIP') {
       setAppliedDiscount({ code: 'FREESHIP ($5.00 Flat)', percent: 'flat-5' });
@@ -114,7 +121,6 @@ export default function PosView({
   const handleCheckoutClick = () => {
     if (cart.length === 0) return;
 
-    // Create receipt structure
     const receipt = {
       id: `REC-${Math.floor(100000 + Math.random() * 900000)}`,
       timestamp: new Date().toLocaleString(),
@@ -130,8 +136,6 @@ export default function PosView({
 
     setReceiptData(receipt);
     setIsReceiptOpen(true);
-    
-    // Call parent to log sale in history
     onCheckout(receipt);
   };
 
@@ -146,18 +150,26 @@ export default function PosView({
     setAppliedDiscount({ code: '', percent: 0 });
     setIsReceiptOpen(false);
     setReceiptData(null);
-    if (manualInputRef.current) {
-      manualInputRef.current.focus();
-    }
   };
+
+  // Filter Catalog Products
+  const filteredCatalogProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || 
+                          p.description?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                          p.barcode.includes(catalogSearch);
+    const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   return (
     <div style={styles.viewContainer}>
+      
+      {/* Header controls block */}
       <div style={styles.header}>
         <div>
-          <h2 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>POS Terminal</h2>
+          <h2 style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>Sales Terminal</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
-            Scan barcodes using camera or USB reader, adjust quantities, and checkout.
+            Tap product cards to register sales, apply coupons, and checkout.
           </p>
         </div>
         <div style={styles.controlsRow}>
@@ -169,94 +181,140 @@ export default function PosView({
             {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
             {isMuted ? "Muted" : "Beep Sound"}
           </button>
-          
-          <button 
-            className={`btn ${isCameraActive ? 'btn-danger' : 'btn-primary'}`}
-            onClick={() => setIsCameraActive(!isCameraActive)}
-          >
-            {isCameraActive ? <CameraOff size={16} /> : <Camera size={16} />}
-            {isCameraActive ? "Close Camera" : "Open Camera"}
-          </button>
         </div>
       </div>
 
-      <div className="pos-grid">
-        
-        {/* Left Side: Scanning & Inputs */}
-        <div className="pos-left-col">
-          
-          {/* Scanner view */}
-          {isCameraActive && (
-            <div style={{ height: '320px', marginBottom: '1.25rem' }}>
-              <Scanner 
-                active={isCameraActive} 
-                onScanSuccess={(code) => {
-                  onManualScan(code);
-                }} 
-              />
-            </div>
+      {/* Mobile Tab Selectors (Toggle between Catalog and Cart on phones) */}
+      <div className="mobile-view-tabs">
+        <button 
+          className={`btn ${activeMobileTab === 'catalog' ? 'btn-primary glow-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveMobileTab('catalog')}
+          style={{ width: '100%' }}
+        >
+          <Grid size={16} /> Shop Catalog
+        </button>
+        <button 
+          className={`btn ${activeMobileTab === 'cart' ? 'btn-primary glow-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveMobileTab('cart')}
+          style={{ width: '100%', position: 'relative' }}
+        >
+          <ShoppingCart size={16} /> Cart
+          {cart.length > 0 && (
+            <span style={styles.mobileCartBadge}>
+              {cart.reduce((s, i) => s + i.quantity, 0)}
+            </span>
           )}
+        </button>
+      </div>
 
-          {/* Barcode forms (Manual Entry & PC Keyboard wedge reminder) */}
-          <div className="glass-panel" style={styles.scanFormCard}>
-            <h3 style={styles.cardTitle}>
-              <Barcode size={18} color="var(--primary)" /> Barcode Entry
-            </h3>
-
-            <form onSubmit={handleManualSubmit} style={styles.formRow}>
-              <div style={{ position: 'relative', flexGrow: 1 }}>
-                <input
-                  ref={manualInputRef}
-                  type="text"
-                  placeholder="Enter barcode or type code (e.g. 1001, 1002)..."
+      {/* Main Terminal Screen Split Layout */}
+      <div className={`pos-grid ${activeMobileTab === 'catalog' ? 'show-catalog' : 'show-cart'}`}>
+        
+        {/* Left Side: Product Catalog Grid */}
+        <div className="pos-left-col">
+          <div className="glass-panel" style={styles.catalogCardContainer}>
+            
+            {/* Search & Category Filter Section */}
+            <div style={styles.searchFilterBlock}>
+              <div style={styles.searchWrapper}>
+                <Search size={18} style={styles.searchIcon} />
+                <input 
+                  type="text" 
+                  placeholder="Search art pieces, catalog..." 
                   className="custom-input"
-                  style={styles.manualInput}
-                  value={manualCode}
-                  onChange={(e) => setManualCode(e.target.value.replace(/[^0-9]/g, ''))}
+                  style={styles.searchInput}
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
                 />
-                <button type="submit" style={styles.enterKeyHint} title="Add barcode to cart">
-                  <CornerDownLeft size={14} /> Enter
-                </button>
               </div>
-              <button type="submit" className="btn btn-primary" style={{ padding: '0 1.5rem' }}>
-                Add Item
-              </button>
-            </form>
-
-            <div style={styles.hardwareTip}>
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--success)' }}></div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                <strong>Hardware Scanner Active:</strong> Simply scan standard barcodes directly with your USB scanner at any time. It will auto-detect and populate.
-              </p>
+              
+              <div className="catalog-tabs">
+                {CATEGORIES.map(cat => (
+                  <button
+                    key={cat}
+                    className={`catalog-tab-btn ${selectedCategory === cat ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory(cat)}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Catalog Grid */}
+            {filteredCatalogProducts.length === 0 ? (
+              <div style={styles.emptyCatalog}>
+                <Grid size={40} color="var(--text-muted)" style={{ opacity: 0.3, marginBottom: '0.75rem' }} />
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>No products found in this category.</p>
+              </div>
+            ) : (
+              <div className="catalog-grid" style={{ padding: '0.25rem 0' }}>
+                {filteredCatalogProducts.map(product => {
+                  const isOutOfStock = product.stock === 0;
+                  return (
+                    <div 
+                      key={product.id} 
+                      className={`glass-panel glass-panel-hover catalog-card ${isOutOfStock ? 'disabled' : ''}`}
+                      onClick={() => handleProductClick(product)}
+                      style={{
+                        ...styles.cardClickReset,
+                        opacity: isOutOfStock ? 0.45 : 1,
+                        cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                        border: isOutOfStock ? '1px dashed var(--border-color)' : '1px solid var(--border-color)'
+                      }}
+                      title={isOutOfStock ? "Out of stock" : `Tap to add: ${product.name}`}
+                    >
+                      <div className="catalog-card-emoji">{product.emoji}</div>
+                      <div className="catalog-card-name">{product.name}</div>
+                      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <div className="catalog-card-price">${product.price.toFixed(2)}</div>
+                        <div className="catalog-card-stock" style={{
+                          color: isOutOfStock ? 'var(--danger)' : product.stock < 5 ? 'var(--warning)' : 'var(--text-muted)'
+                        }}>
+                          {isOutOfStock ? "Sold Out" : `${product.stock} left`}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* Toast style notification of last scanned item */}
-          {lastScannedItem && (
-            <div className="glass-panel glow-success" style={styles.toast}>
-              <span style={{ fontSize: '1.5rem' }}>{lastScannedItem.emoji}</span>
-              <div style={{ flexGrow: 1 }}>
-                <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 700 }}>SCANNED SUCCESS</div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>{lastScannedItem.name}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.95rem', fontWeight: 800 }}>${lastScannedItem.price.toFixed(2)}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Barcode: {lastScannedItem.barcode}</div>
-              </div>
-            </div>
-          )}
+          {/* Barcode input row (For hardware scanning) */}
+          <div className="glass-panel" style={styles.scanFormCard}>
+            <h3 style={styles.cardTitle}>
+              <Barcode size={18} color="var(--primary)" /> Barcode & Scanner Input
+            </h3>
+            <form onSubmit={handleManualSubmit} style={styles.formRow}>
+              <input
+                ref={manualInputRef}
+                type="text"
+                placeholder="Scanner input focused automatically (or type code like 2001)..."
+                className="custom-input"
+                style={{ flexGrow: 1 }}
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value.replace(/[^0-9]/g, ''))}
+              />
+              <button type="submit" className="btn btn-primary" style={{ padding: '0 1.5rem' }}>
+                Add Code
+              </button>
+            </form>
+          </div>
+        </div>
 
-          {/* Cart item display */}
+        {/* Right Side: Cart Summary Panel */}
+        <div className="pos-right-col">
           <div className="glass-panel" style={styles.cartCard}>
             <h3 style={styles.cardTitle}>
-              <ShoppingCart size={18} color="var(--primary)" /> Scanned Items ({cart.reduce((s, i) => s + i.quantity, 0)})
+              <ShoppingCart size={18} color="var(--primary)" /> Shopping Cart ({cart.reduce((s, i) => s + i.quantity, 0)})
             </h3>
 
             {cart.length === 0 ? (
               <div style={styles.emptyCart}>
                 <ShoppingCart size={40} color="var(--text-muted)" style={{ opacity: 0.4, marginBottom: '0.75rem' }} />
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Cart is empty.</p>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.2rem' }}>Scan a barcode to start shopping.</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.2rem' }}>Tap products in the catalog to add items.</p>
               </div>
             ) : (
               <div style={styles.cartList}>
@@ -268,8 +326,6 @@ export default function PosView({
                         <div style={styles.itemName}>{item.name}</div>
                         <div style={styles.itemMeta}>
                           <span>${item.price.toFixed(2)} each</span>
-                          <span style={{ color: 'var(--border-color-hover)' }}>|</span>
-                          <span style={{ color: 'var(--text-muted)' }}>Code: {item.barcode}</span>
                         </div>
                       </div>
                     </div>
@@ -299,7 +355,7 @@ export default function PosView({
                     <button 
                       style={styles.removeBtn} 
                       onClick={() => onRemoveFromCart(item.id)}
-                      title="Remove product from cart"
+                      title="Remove product"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -307,102 +363,99 @@ export default function PosView({
                 ))}
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Right Side: Totals & Checkout actions */}
-        <div className="pos-right-col">
-          <div className="glass-panel" style={styles.summaryCard}>
-            <h3 style={styles.cardTitle}>Bill Summary</h3>
-            
-            <div style={styles.summaryTable}>
-              <div style={styles.summaryRow}>
-                <span>Subtotal</span>
-                <span>${subtotal.toFixed(2)}</span>
-              </div>
-              <div style={styles.summaryRow}>
-                <span>Vat Tax (7%)</span>
-                <span>${tax.toFixed(2)}</span>
-              </div>
+            {/* Bill Summary totals */}
+            <div style={{ ...styles.summarySection, borderTop: cart.length > 0 ? '1px solid var(--border-color)' : 'none', marginTop: 'auto' }}>
+              <div style={styles.summaryTable}>
+                <div style={styles.summaryRow}>
+                  <span>Subtotal</span>
+                  <span>${subtotal.toFixed(2)}</span>
+                </div>
+                <div style={styles.summaryRow}>
+                  <span>Tax (7%)</span>
+                  <span>${tax.toFixed(2)}</span>
+                </div>
 
-              {appliedDiscount.code && (
-                <div style={{ ...styles.summaryRow, color: 'var(--success)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <span>Discount</span>
-                    <button style={styles.promoTagRemove} onClick={handleRemovePromo}>×</button>
+                {appliedDiscount.code && (
+                  <div style={{ ...styles.summaryRow, color: 'var(--success)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span>Discount</span>
+                      <button style={styles.promoTagRemove} onClick={handleRemovePromo}>×</button>
+                    </div>
+                    <span>-${discountAmount.toFixed(2)}</span>
                   </div>
-                  <span>-${discountAmount.toFixed(2)}</span>
+                )}
+
+                <div style={styles.totalRow}>
+                  <span>Total Amount</span>
+                  <span>${total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Promo Code Entry */}
+              {cart.length > 0 && !appliedDiscount.code && (
+                <form onSubmit={handleApplyPromo} style={styles.promoForm}>
+                  <input
+                    type="text"
+                    placeholder="Promo Code..."
+                    className="custom-input"
+                    style={styles.promoInput}
+                    value={discountCode}
+                    onChange={(e) => setDiscountCode(e.target.value)}
+                  />
+                  <button type="submit" className="btn btn-secondary" style={{ padding: '0 1rem', fontSize: '0.85rem' }}>
+                    Apply
+                  </button>
+                </form>
+              )}
+
+              {discountError && (
+                <div style={{ color: 'var(--danger)', fontSize: '0.75rem', marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
+                  {discountError}
                 </div>
               )}
 
-              <div style={styles.totalRow}>
-                <span>Total Amount</span>
-                <span>${total.toFixed(2)}</span>
-              </div>
-            </div>
+              {cart.length > 0 && (
+                <div style={styles.codeTips}>
+                  <Sparkles size={12} color="var(--warning)" />
+                  <span>Try code: <strong>ARTFEST</strong> (20% off)</span>
+                </div>
+              )}
 
-            {/* Promo Codes Input */}
-            {!appliedDiscount.code && (
-              <form onSubmit={handleApplyPromo} style={styles.promoForm}>
-                <input
-                  type="text"
-                  placeholder="Discount Code..."
-                  className="custom-input"
-                  style={styles.promoInput}
-                  value={discountCode}
-                  onChange={(e) => setDiscountCode(e.target.value)}
-                />
-                <button type="submit" className="btn btn-secondary" style={{ padding: '0 1rem', fontSize: '0.85rem' }}>
-                  Apply
-                </button>
-              </form>
-            )}
-
-            {discountError && (
-              <div style={{ color: 'var(--danger)', fontSize: '0.75rem', marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
-                {discountError}
-              </div>
-            )}
-
-            <div style={styles.codeTips}>
-              <Sparkles size={12} color="var(--warning)" />
-              <span>Try codes: <strong>WELCOME10</strong> (10% off) or <strong>SUPERFOOD</strong> (15% off)</span>
-            </div>
-
-            <button 
-              className={`btn btn-primary pulse-primary ${cart.length === 0 ? 'disabled' : ''}`}
-              style={{ ...styles.checkoutBtn, opacity: cart.length === 0 ? 0.5 : 1, cursor: cart.length === 0 ? 'not-allowed' : 'pointer' }}
-              onClick={handleCheckoutClick}
-              disabled={cart.length === 0}
-            >
-              <ShoppingCart size={18} /> Complete Checkout
-            </button>
-
-            {cart.length > 0 && (
               <button 
-                className="btn btn-secondary"
-                style={{ width: '100%', marginTop: '0.75rem' }}
-                onClick={onClearCart}
+                className={`btn btn-primary pulse-primary ${cart.length === 0 ? 'disabled' : ''}`}
+                style={{ ...styles.checkoutBtn, opacity: cart.length === 0 ? 0.5 : 1, cursor: cart.length === 0 ? 'not-allowed' : 'pointer' }}
+                onClick={handleCheckoutClick}
+                disabled={cart.length === 0}
               >
-                Clear Cart
+                <ShoppingCart size={18} /> Complete Checkout
               </button>
-            )}
+
+              {cart.length > 0 && (
+                <button 
+                  className="btn btn-secondary"
+                  style={{ width: '100%', marginTop: '0.75rem' }}
+                  onClick={onClearCart}
+                >
+                  Clear Cart
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
       </div>
 
-      {/* Receipts Modal popup */}
+      {/* Receipts Popup Modal */}
       {isReceiptOpen && receiptData && (
         <div style={styles.modalOverlay}>
           <div className="glass-panel" style={styles.receiptContainer}>
             
-            {/* Print friendly block wrapper */}
             <div id="printable-receipt" style={styles.receiptBody}>
               <div style={styles.receiptHeader}>
                 <div style={styles.receiptLogo}>⚡ OMNISCAN POS</div>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.2rem' }}>OmniScan Retail Ltd.</div>
-                <div style={{ color: '#64748b', fontSize: '0.8rem' }}>Bangkok, Thailand</div>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.2rem' }}>Art Fair Artist Ledger</div>
+                <div style={{ color: '#64748b', fontSize: '0.8rem' }}>Booth #12 - Craft Festival</div>
                 <div style={{ borderBottom: '1px dashed #cbd5e1', margin: '1rem 0' }}></div>
               </div>
 
@@ -438,7 +491,7 @@ export default function PosView({
                   <span>${receiptData.subtotal.toFixed(2)}</span>
                 </div>
                 <div style={styles.receiptTotalRow}>
-                  <span>Vat Tax (7%)</span>
+                  <span>Tax (7%)</span>
                   <span>${receiptData.tax.toFixed(2)}</span>
                 </div>
                 {receiptData.discount.amount > 0 && (
@@ -457,27 +510,8 @@ export default function PosView({
               <div style={{ borderBottom: '1px dashed #cbd5e1', margin: '1rem 0' }}></div>
 
               <div style={styles.receiptFooter}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>Thank you for your purchase!</div>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.2rem' }}>Please keep this receipt for returns.</div>
-                
-                {/* Visual barcode scan print helper */}
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
-                  <svg width="120" height="40">
-                    <rect width="120" height="40" fill="#ffffff" />
-                    <g fill="#000000">
-                      {/* Fake barcode lines for printable receipt */}
-                      {Array.from({ length: 30 }).map((_, i) => (
-                        <rect 
-                          key={i} 
-                          x={15 + i * 3} 
-                          y={5} 
-                          width={(i % 3 === 0 || i % 7 === 0) ? 2 : 1} 
-                          height={30} 
-                        />
-                      ))}
-                    </g>
-                  </svg>
-                </div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>Thank you for supporting custom art!</div>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.2rem' }}>Artist Session Record</div>
               </div>
             </div>
 
@@ -513,6 +547,46 @@ const styles = {
     display: 'flex',
     gap: '0.75rem',
   },
+  catalogCardContainer: {
+    padding: '1.25rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+  },
+  searchFilterBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+    marginBottom: '0.5rem',
+  },
+  searchWrapper: {
+    position: 'relative',
+    width: '100%',
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: '12px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: 'var(--text-muted)',
+    pointerEvents: 'none'
+  },
+  searchInput: {
+    paddingLeft: '2.5rem',
+    width: '100%',
+  },
+  emptyCatalog: {
+    padding: '3rem 1rem',
+    textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardClickReset: {
+    userSelect: 'none',
+    transition: 'all 0.15s ease',
+  },
   scanFormCard: {
     padding: '1.25rem',
     display: 'flex',
@@ -534,46 +608,9 @@ const styles = {
     display: 'flex',
     gap: '0.75rem',
   },
-  manualInput: {
-    width: '100%',
-    paddingRight: '4.5rem',
-  },
-  enterKeyHint: {
-    position: 'absolute',
-    right: '8px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    background: 'var(--bg-tertiary)',
-    border: '1px solid var(--border-color)',
-    borderRadius: '4px',
-    color: 'var(--text-muted)',
-    fontSize: '0.7rem',
-    padding: '0.2rem 0.4rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.2rem',
-    cursor: 'pointer',
-  },
-  hardwareTip: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.6rem 0.8rem',
-    backgroundColor: 'rgba(16, 185, 129, 0.04)',
-    border: '1px solid rgba(16, 185, 129, 0.1)',
-    borderRadius: '6px',
-  },
-  toast: {
-    padding: '1rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-    animation: 'slideIn 0.2s ease-out forwards',
-    borderLeft: '4px solid var(--success)',
-  },
   cartCard: {
     padding: '1.25rem',
-    minHeight: '280px',
+    minHeight: '480px',
     display: 'flex',
     flexDirection: 'column',
   },
@@ -583,13 +620,16 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '3rem 1rem',
+    padding: '4rem 1rem',
   },
   cartList: {
     display: 'flex',
     flexDirection: 'column',
     gap: '0.75rem',
     marginTop: '0.5rem',
+    maxHeight: '300px',
+    overflowY: 'auto',
+    paddingRight: '4px',
   },
   itemInfo: {
     display: 'flex',
@@ -599,10 +639,10 @@ const styles = {
     minWidth: 0,
   },
   itemEmoji: {
-    fontSize: '1.75rem',
-    width: '40px',
-    height: '40px',
-    borderRadius: '8px',
+    fontSize: '1.5rem',
+    width: '36px',
+    height: '36px',
+    borderRadius: '6px',
     background: 'rgba(255, 255, 255, 0.03)',
     border: '1px solid var(--border-color)',
     display: 'flex',
@@ -611,7 +651,7 @@ const styles = {
     flexShrink: 0,
   },
   itemName: {
-    fontSize: '0.95rem',
+    fontSize: '0.9rem',
     fontWeight: 700,
     color: 'var(--text-primary)',
     whiteSpace: 'nowrap',
@@ -635,8 +675,8 @@ const styles = {
     gap: '0.5rem',
   },
   qtyBtn: {
-    width: '24px',
-    height: '24px',
+    width: '22px',
+    height: '22px',
     borderRadius: '4px',
     border: 'none',
     background: 'transparent',
@@ -647,16 +687,16 @@ const styles = {
     justifyContent: 'center',
   },
   qtyCount: {
-    fontSize: '0.85rem',
+    fontSize: '0.8rem',
     fontWeight: 700,
-    width: '18px',
+    width: '16px',
     textAlign: 'center',
   },
   itemSubtotal: {
-    fontSize: '1rem',
+    fontSize: '0.95rem',
     fontWeight: 800,
     color: 'var(--text-primary)',
-    width: '80px',
+    width: '70px',
     textAlign: 'right',
   },
   removeBtn: {
@@ -667,19 +707,19 @@ const styles = {
     padding: '0.25rem',
     borderRadius: '4px',
   },
-  summaryCard: {
-    padding: '1.5rem',
+  summarySection: {
+    paddingTop: '1rem',
   },
   summaryTable: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.85rem',
-    margin: '1.25rem 0',
+    gap: '0.75rem',
+    marginBottom: '1rem',
   },
   summaryRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     color: 'var(--text-secondary)',
   },
   totalRow: {
@@ -689,18 +729,18 @@ const styles = {
     fontWeight: 800,
     color: 'var(--text-primary)',
     borderTop: '1px solid var(--border-color)',
-    paddingTop: '0.85rem',
+    paddingTop: '0.75rem',
     marginTop: '0.25rem',
   },
   promoForm: {
     display: 'flex',
     gap: '0.5rem',
-    marginBottom: '1rem',
+    marginBottom: '0.75rem',
   },
   promoInput: {
     flexGrow: 1,
-    padding: '0.5rem 0.75rem',
-    fontSize: '0.85rem',
+    padding: '0.45rem 0.75rem',
+    fontSize: '0.8rem',
   },
   promoTagRemove: {
     background: 'transparent',
@@ -708,7 +748,7 @@ const styles = {
     color: 'var(--danger)',
     cursor: 'pointer',
     fontWeight: 'bold',
-    fontSize: '1rem',
+    fontSize: '0.9rem',
   },
   codeTips: {
     display: 'flex',
@@ -716,7 +756,7 @@ const styles = {
     gap: '0.4rem',
     fontSize: '0.7rem',
     color: 'var(--text-muted)',
-    marginBottom: '1.25rem',
+    marginBottom: '1rem',
   },
   checkoutBtn: {
     width: '100%',
@@ -759,7 +799,6 @@ const styles = {
     fontWeight: 800,
     fontSize: '1.3rem',
     color: '#0f172a',
-    letterSpacing: '-0.02em',
   },
   receiptMeta: {
     fontSize: '0.8rem',
@@ -799,5 +838,20 @@ const styles = {
     marginTop: '1.5rem',
     borderTop: '1px solid #e2e8f0',
     paddingTop: '1rem',
+  },
+  mobileCartBadge: {
+    position: 'absolute',
+    top: '-4px',
+    right: '-4px',
+    backgroundColor: 'var(--danger)',
+    color: '#fff',
+    fontSize: '0.65rem',
+    fontWeight: 'bold',
+    borderRadius: '50%',
+    width: '16px',
+    height: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   }
 };

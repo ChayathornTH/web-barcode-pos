@@ -1,153 +1,122 @@
 export const DEFAULT_PRODUCTS = [
   {
-    id: "prod-1",
-    barcode: "8850029010011",
-    name: "Farmhouse Whole Wheat Bread",
-    price: 35.00,
-    category: "Bakery",
-    stock: 45,
-    emoji: "🍞",
-    description: "Freshly baked whole wheat bread, rich in fiber."
-  },
-  {
-    id: "prod-2",
-    barcode: "8850125000114",
-    name: "Lactasoy Soy Milk 300ml",
-    price: 15.00,
-    category: "Dairy",
-    stock: 120,
-    emoji: "🥛",
-    description: "Original flavor sweetened soy milk."
-  },
-  {
-    id: "prod-3",
-    barcode: "8850999111006",
-    name: "Singha Soda Water 325ml",
-    price: 10.00,
-    category: "Beverages",
-    stock: 200,
-    emoji: "🥤",
-    description: "Fizzy and refreshing club soda."
-  },
-  {
-    id: "prod-4",
-    barcode: "8851004101016",
-    name: "Lay's Potato Chips Original 50g",
-    price: 25.00,
-    category: "Snacks",
-    stock: 85,
-    emoji: "🍟",
-    description: "Crispy salted classic potato chips."
-  },
-  {
-    id: "prod-5",
-    barcode: "8851950001019",
-    name: "Mama Instant Noodles Shrimp Tom Yum",
-    price: 8.00,
-    category: "Packaged Food",
-    stock: 150,
-    emoji: "🍜",
-    description: "Spicy and sour Thai shrimp ramen."
-  },
-  {
-    id: "prod-6",
-    barcode: "8850188200155",
-    name: "Coca-Cola Zero Sugar 325ml",
-    price: 17.00,
-    category: "Beverages",
-    stock: 180,
-    emoji: "🥤",
-    description: "Classic Coca-Cola taste with zero sugar."
-  },
-  {
-    id: "prod-7",
-    barcode: "8852008300222",
-    name: "Double A A4 Copy Paper 80gsm",
-    price: 145.00,
-    category: "Stationery",
-    stock: 40,
-    emoji: "📄",
-    description: "High-quality bright white printer paper."
-  },
-  {
-    id: "prod-8",
-    barcode: "8850388107223",
-    name: "Colgate Triple Action Toothpaste",
-    price: 49.00,
-    category: "Personal Care",
-    stock: 60,
-    emoji: "🪥",
-    description: "Cavity protection, white teeth, and fresh breath."
-  },
-  {
-    id: "prod-9",
-    barcode: "8851756100244",
-    name: "Gillette Vector Triple Razor",
-    price: 85.00,
-    category: "Personal Care",
-    stock: 35,
-    emoji: "🪒",
-    description: "Speedy shave razor with twin blades."
-  },
-  {
-    id: "prod-10",
-    barcode: "8850002011080",
-    name: "Nescafe Red Cup Coffee 90g",
-    price: 120.00,
-    category: "Beverages",
-    stock: 50,
-    emoji: "☕",
-    description: "Rich and robust instant pure coffee."
-  },
-  // Short barcode fallbacks for easy manual typing/testing
-  {
-    id: "prod-11",
-    barcode: "1001",
-    name: "Red Apple (Fuji)",
-    price: 18.00,
-    category: "Fresh Produce",
-    stock: 90,
-    emoji: "🍎",
-    description: "Sweet and crunchy fresh Fuji apple."
-  },
-  {
-    id: "prod-12",
-    barcode: "1002",
-    name: "Cavendish Banana (Single)",
-    price: 12.00,
-    category: "Fresh Produce",
-    stock: 75,
-    emoji: "🍌",
-    description: "Perfectly ripe single yellow banana."
-  },
-  {
-    id: "prod-13",
-    barcode: "1003",
-    name: "Organic Whole Milk 1L",
-    price: 95.00,
-    category: "Dairy",
-    stock: 30,
-    emoji: "🥛",
-    description: "Fresh pasteurized organic full cream milk."
-  },
-  {
-    id: "prod-14",
-    barcode: "1004",
-    name: "Avocado (Hass)",
+    id: "art-1",
+    barcode: "2001",
+    name: "Original Acrylic Canvas (8x8)",
     price: 45.00,
-    category: "Fresh Produce",
-    stock: 25,
-    emoji: "🥑",
-    description: "Creamy, nutrient-rich Haas avocado."
+    category: "Paintings",
+    stock: 5,
+    emoji: "🎨",
+    description: "Hand-painted original acrylic canvas with easel."
   },
   {
-    id: "prod-15",
-    barcode: "1005",
-    name: "KitKat 4-Finger Chocolate Bar",
-    price: 20.00,
-    category: "Snacks",
-    stock: 110,
-    emoji: "🍫",
-    description: "Crispy wafer fingers in milk chocolate."
+    id: "art-2",
+    barcode: "2002",
+    name: "Original Watercolor Landscape",
+    price: 35.00,
+    category: "Paintings",
+    stock: 3,
+    emoji: "🌸",
+    description: "Original watercolor on high-grade archival paper."
+  },
+  {
+    id: "art-3",
+    barcode: "2003",
+    name: "Holographic Sticker Pack (5pcs)",
+    price: 12.00,
+    category: "Stickers",
+    stock: 60,
+    emoji: "✨",
+    description: "Waterproof, die-cut holographic vinyl stickers."
+  },
+  {
+    id: "art-4",
+    barcode: "2004",
+    name: "Art Print: Starry Sky (A4)",
+    price: 15.00,
+    category: "Prints",
+    stock: 25,
+    emoji: "🖼️",
+    description: "Premium matte print of the original oil painting."
+  },
+  {
+    id: "art-5",
+    barcode: "2005",
+    name: "Art Print: Cozy Coffee Shop (A4)",
+    price: 15.00,
+    category: "Prints",
+    stock: 25,
+    emoji: "☕",
+    description: "Warm-toned illustration print on 300gsm paper."
+  },
+  {
+    id: "art-6",
+    barcode: "2006",
+    name: "Handmade Acrylic Keychain",
+    price: 8.00,
+    category: "Accessories",
+    stock: 20,
+    emoji: "🔑",
+    description: "Double-sided clear acrylic keychain."
+  },
+  {
+    id: "art-7",
+    barcode: "2007",
+    name: "Collectible Enamel Pin",
+    price: 10.00,
+    category: "Accessories",
+    stock: 35,
+    emoji: "📌",
+    description: "Hard enamel pin with gold metal finish."
+  },
+  {
+    id: "art-8",
+    barcode: "2008",
+    name: "Art Postcard Set (5 designs)",
+    price: 6.00,
+    category: "Prints",
+    stock: 45,
+    emoji: "✉️",
+    description: "Mini prints styled as writeable postcards."
+  },
+  {
+    id: "art-9",
+    barcode: "2009",
+    name: "Hand-drawn Sketchbook (A5)",
+    price: 22.00,
+    category: "Stationery",
+    stock: 10,
+    emoji: "📓",
+    description: "Blank pages sketchbook with hand-drawn cover art."
+  },
+  {
+    id: "art-10",
+    barcode: "2010",
+    name: "Original Gouache Mini Frame",
+    price: 28.00,
+    category: "Paintings",
+    stock: 4,
+    emoji: "🖼️",
+    description: "Framed 3x3 inch mini gouache painting."
+  },
+  {
+    id: "art-11",
+    barcode: "2011",
+    name: "Individual Die-Cut Sticker",
+    price: 3.00,
+    category: "Stickers",
+    stock: 120,
+    emoji: "💖",
+    description: "Matte vinyl sticker of various cute characters."
+  },
+  {
+    id: "art-12",
+    barcode: "2012",
+    name: "Washi Tape Roll",
+    price: 5.00,
+    category: "Stationery",
+    stock: 50,
+    emoji: "🎞️",
+    description: "Decorative paper tape for bullet journals."
   }
 ];
