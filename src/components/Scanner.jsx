@@ -1,12 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { Camera, RefreshCw, AlertCircle } from 'lucide-react';
+import { Camera, RefreshCw, AlertCircle, ShieldAlert } from 'lucide-react';
 
 export default function Scanner({ onScanSuccess, active }) {
   const [cameras, setCameras] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const [error, setError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  
+  // Diagnostics
+  const [frameCount, setFrameCount] = useState(0);
+  const [activeResolution, setActiveResolution] = useState('Checking...');
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+
   const qrCodeInstance = useRef(null);
   const scannerId = "pos-webcam-scanner";
 
@@ -17,7 +23,8 @@ export default function Scanner({ onScanSuccess, active }) {
 
   // Scan failure callback
   const handleScanFailure = (errorMessage) => {
-    // Ignore spam errors to keep console clean
+    // Count frames to verify active processing loop
+    setFrameCount(prev => prev + 1);
   };
 
   // Find cameras
@@ -45,7 +52,7 @@ export default function Scanner({ onScanSuccess, active }) {
       })
       .catch((err) => {
         console.error("Error getting cameras", err);
-        setError("Camera access denied. Please enable browser webcam permissions.");
+        setError("Camera access denied. Please check your browser/phone settings and allow camera permissions.");
       });
 
     return () => {
@@ -64,10 +71,11 @@ export default function Scanner({ onScanSuccess, active }) {
 
   const startScanner = async (cameraId) => {
     setError('');
+    setFrameCount(0);
+    setActiveResolution('Locating stream...');
     await stopScanner();
 
     try {
-      // Initialize with specific formats for peak performance and faster 1D detection
       const html5Qrcode = new Html5Qrcode(scannerId, {
         formatsToSupport: [
           Html5QrcodeSupportedFormats.EAN_13,
@@ -82,24 +90,21 @@ export default function Scanner({ onScanSuccess, active }) {
       qrCodeInstance.current = html5Qrcode;
 
       const config = {
-        fps: 24, // Smoother capture rate
+        fps: 24,
         qrbox: (width, height) => {
-          // Barcodes are wide and rectangular! A square box forces the user to stand back.
-          // By making the scanner box wide (e.g. 260px) and short (e.g. 110px),
-          // users can hold the barcode closer to the camera, leading to a much sharper image.
-          const boxWidth = Math.max(220, Math.min(width - 40, 300));
-          const boxHeight = Math.max(100, Math.min(height - 40, 130));
+          // Adjust box size and shape for horizontal 1D barcodes
+          const boxWidth = Math.max(220, Math.min(width - 40, 310));
+          const boxHeight = Math.max(90, Math.min(height - 40, 130));
           return {
             width: boxWidth,
             height: boxHeight
           };
         },
         aspectRatio: 1.333334,
-        // Request higher camera resolution (HD 720p) so thin barcode lines are clear
         videoConstraints: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: "environment" // Prefer rear-facing camera on mobile phones
+          facingMode: "environment"
         }
       };
 
@@ -111,6 +116,28 @@ export default function Scanner({ onScanSuccess, active }) {
       );
 
       setIsScanning(true);
+
+      // Check stream settings after a short delay
+      setTimeout(() => {
+        try {
+          const videoElement = document.getElementById(scannerId)?.querySelector('video');
+          if (videoElement && videoElement.srcObject) {
+            const track = videoElement.srcObject.getVideoTracks()[0];
+            if (track) {
+              const settings = track.getSettings();
+              setActiveResolution(`${settings.width || 640}x${settings.height || 480} @ ${Math.round(settings.frameRate || 24)}fps`);
+            } else {
+              setActiveResolution("Stream running (track details restricted)");
+            }
+          } else {
+            setActiveResolution("Running (default resolution)");
+          }
+        } catch (e) {
+          console.warn("Could not query active media track settings", e);
+          setActiveResolution("Active (query restricted)");
+        }
+      }, 800);
+
     } catch (err) {
       console.error("Failed to start scanner:", err);
       setError("Could not start camera feed. Make sure it is not in use by another app.");
@@ -158,7 +185,7 @@ export default function Scanner({ onScanSuccess, active }) {
             backgroundColor: isScanning ? 'var(--success)' : 'var(--danger)',
             display: 'inline-block'
           }}></span>
-          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Webcam Scanner</span>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Scanner Screen</span>
         </div>
 
         {cameras.length > 1 && (
@@ -207,10 +234,36 @@ export default function Scanner({ onScanSuccess, active }) {
         )}
       </div>
 
+      {/* Diagnostics block (Collapsible) */}
       <div style={styles.infoFooter}>
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-          Align barcode inside the frame. Fits EAN-13, EAN-8, UPC, Code-128, etc.
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            Place barcode in the horizontal box.
+          </p>
+          <button 
+            style={styles.debugToggle} 
+            onClick={() => setShowDiagnostics(!showDiagnostics)}
+          >
+            {showDiagnostics ? "Hide Stats" : "Show Stats"}
+          </button>
+        </div>
+        
+        {showDiagnostics && (
+          <div style={styles.debugPanel}>
+            <div style={styles.debugRow}>
+              <span>Resolution:</span>
+              <span style={{ color: 'var(--accent)' }}>{activeResolution}</span>
+            </div>
+            <div style={styles.debugRow}>
+              <span>Frames Processed:</span>
+              <span style={{ color: 'var(--success)' }}>{frameCount}</span>
+            </div>
+            <div style={styles.debugRow}>
+              <span>Formats:</span>
+              <span style={{ color: 'var(--text-secondary)' }}>EAN-13, EAN-8, UPC, Code-128</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -306,5 +359,29 @@ const styles = {
     padding: '0.6rem',
     borderTop: '1px solid var(--border-color)',
     background: 'rgba(0,0,0,0.1)'
+  },
+  debugToggle: {
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--primary)',
+    fontSize: '0.7rem',
+    cursor: 'pointer',
+    textDecoration: 'underline',
+  },
+  debugPanel: {
+    marginTop: '0.4rem',
+    padding: '0.5rem',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: '4px',
+    border: '1px solid var(--border-color)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.2rem',
+  },
+  debugRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '0.65rem',
+    fontFamily: 'monospace',
   }
 };
