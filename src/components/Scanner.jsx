@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { Camera, RefreshCw, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Camera, RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function Scanner({ onScanSuccess, active }) {
   const [cameras, setCameras] = useState([]);
@@ -8,16 +8,22 @@ export default function Scanner({ onScanSuccess, active }) {
   const [error, setError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   
-  // Diagnostics
+  // Diagnostics & Debug Logs
   const [frameCount, setFrameCount] = useState(0);
   const [activeResolution, setActiveResolution] = useState('Checking...');
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(true); // Default to true for troubleshooting
+  const [lastDetections, setLastDetections] = useState([]);
 
   const qrCodeInstance = useRef(null);
   const scannerId = "pos-webcam-scanner";
 
   // Scan success callback wrapper
   const handleScanSuccess = (decodedText, decodedResult) => {
+    // Add to diagnostics list
+    const logTime = new Date().toLocaleTimeString();
+    setLastDetections(prev => [{ time: logTime, text: decodedText }, ...prev.slice(0, 4)]);
+    
+    // Bubble up to parent App
     onScanSuccess(decodedText);
   };
 
@@ -73,6 +79,7 @@ export default function Scanner({ onScanSuccess, active }) {
     setError('');
     setFrameCount(0);
     setActiveResolution('Locating stream...');
+    setLastDetections([]);
     await stopScanner();
 
     try {
@@ -104,7 +111,9 @@ export default function Scanner({ onScanSuccess, active }) {
         videoConstraints: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: "environment"
+          facingMode: "environment",
+          // Advanced constraints: Request continuous autofocus on mobile devices
+          advanced: [{ focusMode: "continuous" }]
         }
       };
 
@@ -234,7 +243,7 @@ export default function Scanner({ onScanSuccess, active }) {
         )}
       </div>
 
-      {/* Diagnostics block (Collapsible) */}
+      {/* Diagnostics block */}
       <div style={styles.infoFooter}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
@@ -259,9 +268,29 @@ export default function Scanner({ onScanSuccess, active }) {
               <span style={{ color: 'var(--success)' }}>{frameCount}</span>
             </div>
             <div style={styles.debugRow}>
-              <span>Formats:</span>
-              <span style={{ color: 'var(--text-secondary)' }}>EAN-13, EAN-8, UPC, Code-128</span>
+              <span>Autofocus:</span>
+              <span style={{ color: 'var(--success)' }}>Continuous (Active)</span>
             </div>
+            <div style={{ ...styles.debugRow, borderTop: '1px dashed var(--border-color)', paddingTop: '0.25rem', marginTop: '0.25rem', fontWeight: 'bold' }}>
+              <span>Detections Log:</span>
+              <span>(Last 5 scans)</span>
+            </div>
+            {lastDetections.length === 0 ? (
+              <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', padding: '0.2rem 0' }}>
+                No barcodes detected in frame yet.
+              </div>
+            ) : (
+              <div style={styles.logsList}>
+                {lastDetections.map((det, idx) => (
+                  <div key={idx} style={styles.logRow}>
+                    <span style={{ color: 'var(--text-muted)' }}>[{det.time}]</span>
+                    <span style={{ color: 'var(--success)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block', maxWidth: '180px' }}>
+                      "{det.text}"
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -382,6 +411,18 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     fontSize: '0.65rem',
+    fontFamily: 'monospace',
+  },
+  logsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.1rem',
+    marginTop: '0.2rem',
+  },
+  logRow: {
+    display: 'flex',
+    gap: '0.5rem',
+    fontSize: '0.6rem',
     fontFamily: 'monospace',
   }
 };
