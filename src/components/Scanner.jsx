@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
-import { Camera, RefreshCw, AlertCircle, Play, Square } from 'lucide-react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Camera, RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function Scanner({ onScanSuccess, active }) {
   const [cameras, setCameras] = useState([]);
@@ -12,14 +12,12 @@ export default function Scanner({ onScanSuccess, active }) {
 
   // Scan success callback wrapper
   const handleScanSuccess = (decodedText, decodedResult) => {
-    // Play sound or trigger feedback
     onScanSuccess(decodedText);
   };
 
   // Scan failure callback
   const handleScanFailure = (errorMessage) => {
-    // html5-qrcode scans constantly, so it spam failures when no barcode is in sight.
-    // We ignore this to keep console clean and performance high.
+    // Ignore spam errors to keep console clean
   };
 
   // Find cameras
@@ -33,6 +31,7 @@ export default function Scanner({ onScanSuccess, active }) {
       .then((devices) => {
         if (devices && devices.length > 0) {
           setCameras(devices);
+          
           // Try to select rear camera as default on mobile, or first camera on PC
           const rearCam = devices.find(device => 
             device.label.toLowerCase().includes('back') || 
@@ -46,7 +45,7 @@ export default function Scanner({ onScanSuccess, active }) {
       })
       .catch((err) => {
         console.error("Error getting cameras", err);
-        setError("Camera access denied or unavailable. Please enable permissions.");
+        setError("Camera access denied. Please enable browser webcam permissions.");
       });
 
     return () => {
@@ -65,25 +64,43 @@ export default function Scanner({ onScanSuccess, active }) {
 
   const startScanner = async (cameraId) => {
     setError('');
-    
-    // Stop any running scanner first
     await stopScanner();
 
     try {
-      const html5Qrcode = new Html5Qrcode(scannerId);
+      // Initialize with specific formats for peak performance and faster 1D detection
+      const html5Qrcode = new Html5Qrcode(scannerId, {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ]
+      });
       qrCodeInstance.current = html5Qrcode;
 
       const config = {
-        fps: 15,
-        // Barcode reader size - responsive config
+        fps: 24, // Smoother capture rate
         qrbox: (width, height) => {
-          const size = Math.min(width, height) * 0.7;
+          // Barcodes are wide and rectangular! A square box forces the user to stand back.
+          // By making the scanner box wide (e.g. 260px) and short (e.g. 110px),
+          // users can hold the barcode closer to the camera, leading to a much sharper image.
+          const boxWidth = Math.max(220, Math.min(width - 40, 300));
+          const boxHeight = Math.max(100, Math.min(height - 40, 130));
           return {
-            width: Math.max(220, Math.min(width - 40, 320)),
-            height: Math.max(120, Math.min(height - 40, 180))
+            width: boxWidth,
+            height: boxHeight
           };
         },
-        aspectRatio: 1.333334
+        aspectRatio: 1.333334,
+        // Request higher camera resolution (HD 720p) so thin barcode lines are clear
+        videoConstraints: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "environment" // Prefer rear-facing camera on mobile phones
+        }
       };
 
       await html5Qrcode.start(
@@ -116,7 +133,6 @@ export default function Scanner({ onScanSuccess, active }) {
     }
   };
 
-  // Toggle camera
   const handleCameraChange = (e) => {
     setSelectedCameraId(e.target.value);
   };
@@ -162,7 +178,6 @@ export default function Scanner({ onScanSuccess, active }) {
       </div>
 
       <div style={styles.previewContainer}>
-        {/* html5-qrcode target element */}
         <div id={scannerId} style={styles.webcamView}></div>
         
         {isScanning && (
@@ -252,8 +267,8 @@ const styles = {
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: '260px',
-    height: '140px',
+    width: '280px',
+    height: '110px',
     pointerEvents: 'none',
     zIndex: 5,
   },
