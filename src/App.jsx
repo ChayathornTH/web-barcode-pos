@@ -4,23 +4,38 @@ import PosView from './components/PosView';
 import InventoryView from './components/InventoryView';
 import DashboardView from './components/DashboardView';
 import { ShoppingCart, Database, Barcode, LayoutDashboard, Settings, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { 
+  subscribeToProducts, 
+  subscribeToSalesHistory, 
+  addSaleRecord, 
+  updateProductStock, 
+  addProductRecord, 
+  deleteProductRecord, 
+  resetSalesHistory as resetSalesFirebase, 
+  resetInventoryCatalog as resetInventoryFirebase 
+} from './firebase';
 
 export default function App() {
   const [activeView, setActiveView] = useState('terminal');
   
+  // Cloud Sync Settings State
+  const [boothId, setBoothId] = useState(() => {
+    return localStorage.getItem('pos_booth_id') || "";
+  });
+
   // Database States
   const [products, setProducts] = useState(() => {
     const saved = localStorage.getItem('pos_products');
     return saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
   });
 
-  // Cart State
+  // Cart State (Local to device so cashiers don't collide)
   const [cart, setCart] = useState(() => {
     const saved = localStorage.getItem('pos_cart');
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Sales History / Ledger State
+  // Sales History State
   const [salesHistory, setSalesHistory] = useState(() => {
     const saved = localStorage.getItem('pos_sales_history');
     return saved ? JSON.parse(saved) : [];
@@ -31,18 +46,44 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [globalScanTrigger, setGlobalScanTrigger] = useState(0);
 
-  // Sync state to local storage
+  // Sync LOCAL states to local storage (only when NOT using cloud sync)
   useEffect(() => {
-    localStorage.setItem('pos_products', JSON.stringify(products));
-  }, [products]);
+    if (!boothId) {
+      localStorage.setItem('pos_products', JSON.stringify(products));
+    }
+  }, [products, boothId]);
 
   useEffect(() => {
     localStorage.setItem('pos_cart', JSON.stringify(cart));
   }, [cart]);
 
   useEffect(() => {
-    localStorage.setItem('pos_sales_history', JSON.stringify(salesHistory));
-  }, [salesHistory]);
+    if (!boothId) {
+      localStorage.setItem('pos_sales_history', JSON.stringify(salesHistory));
+    }
+  }, [salesHistory, boothId]);
+
+  // Real-time Cloud DB Synchronization Hook
+  useEffect(() => {
+    if (!boothId) return;
+
+    addToast(`Syncing with cloud booth: "${boothId}"`, 'info');
+    
+    // Subscribe to products sub-collection
+    const unsubscribeProds = subscribeToProducts(boothId, (items) => {
+      setProducts(items);
+    });
+
+    // Subscribe to sales sub-collection
+    const unsubscribeSales = subscribeToSalesHistory(boothId, (history) => {
+      setSalesHistory(history);
+    });
+
+    return () => {
+      unsubscribeProds();
+      unsubscribeSales();
+    };
+  }, [boothId]);
 
   // Floating Toast Notification Helper
   const addToast = (message, type = 'info') => {
@@ -55,48 +96,76 @@ export default function App() {
     }, 3500);
   };
 
+  // Connect to a shared Cloud Booth
+  const handleConnectBooth = (e) => {
+    e.preventDefault();
+    const code = e.target.elements.boothInput.value.trim().toUpperCase();
+    if (!code) return;
+    
+    setBoothId(code);
+    localStorage.setItem('pos_booth_id', code);
+    addToast(`Connected to Shared Cloud Booth: "${code}"`, "success");
+  };
+
+  // Disconnect from cloud and fall back to local storage
+  const handleDisconnectBooth = () => {
+    if (window.confirm("Disconnect from cloud sync? You will fall back to local offline storage.")) {
+      setBoothId("");
+      localStorage.removeItem('pos_booth_id');
+      addToast("Switched to local offline storage.", "info");
+      
+      // Load offline presets
+      const savedProds = localStorage.getItem('pos_products');
+      setProducts(savedProds ? JSON.parse(savedProds) : DEFAULT_PRODUCTS);
+      const savedHistory = localStorage.getItem('pos_sales_history');
+      setSalesHistory(savedHistory ? JSON.parse(savedHistory) : []);
+    }
+  };
+
   // Centralized scan barcode action
   const handleScanEvent = (barcodeString) => {
     // Look up item
     const matchedProduct = products.find(p => p.barcode === barcodeString);
 
     if (matchedProduct) {
+      if (matchedProduct.stock === 0) {
+        addToast(`"${matchedProduct.name}" is out of stock!`, 'warning');
+        return false;
+      }
+
       // Add to cart
       setCart((prevCart) => {
         const existing = prevCart.find(item => item.id === matchedProduct.id);
         if (existing) {
-          // Increment qty
           return prevCart.map(item => 
             item.id === matchedProduct.id 
               ? { ...item, quantity: item.quantity + 1 }
               : item
           );
         } else {
-          // Add new item line
           return [...prevCart, { ...matchedProduct, quantity: 1 }];
         }
       });
 
       // Update inventory stock (decrement by 1)
-      setProducts((prevProducts) => 
-        prevProducts.map(p => 
-          p.id === matchedProduct.id 
-            ? { ...p, stock: Math.max(0, p.stock - 1) }
-            : p
-        )
-      );
+      const newStock = Math.max(0, matchedProduct.stock - 1);
+      if (boothId) {
+        updateProductStock(boothId, matchedProduct.id, newStock);
+      } else {
+        setProducts((prevProducts) => 
+          prevProducts.map(p => 
+            p.id === matchedProduct.id ? { ...p, stock: newStock } : p
+          )
+        );
+      }
 
-      // Trigger flash highlight in POS view
       setLastScannedItem({ ...matchedProduct, barcode: barcodeString });
-      
-      // Auto switch view to terminal if scan occurs elsewhere (so they see the cart update)
       setActiveView('terminal');
 
       addToast(`Added ${matchedProduct.name} to cart.`, 'success');
       return true;
     } else {
-      addToast(`Unknown Barcode: "${barcodeString}". Please register it in the inventory database.`, 'error');
-      // Set scanning trigger to display quick error feedback flash
+      addToast(`Unknown Barcode: "${barcodeString}". Register it in inventory.`, 'error');
       setGlobalScanTrigger(prev => prev + 1);
       return false;
     }
@@ -112,23 +181,17 @@ export default function App() {
       const delay = currentTime - lastKeyTime;
       lastKeyTime = currentTime;
 
-      // If delay between keystrokes is too long, we treat it as human typing and clear buffer
       if (delay > 65) {
         buffer = "";
       }
 
-      // Check if focus is inside standard text inputs
       const isInputFocused = document.activeElement.tagName === 'INPUT' || 
                              document.activeElement.tagName === 'TEXTAREA' || 
                              document.activeElement.tagName === 'SELECT';
 
-      // Capture standard digit keys (barcodes are numeric, but support some alphanumeric wedges)
       if (e.key.length === 1 && /[0-9a-zA-Z]/.test(e.key)) {
         buffer += e.key;
       } else if (e.key === 'Enter') {
-        // Barcode wedges terminate with "Enter"
-        // Scanners scan extremely quickly (delay < 45ms per character).
-        // If buffer has digits and it arrived fast OR if no text input is focused, process it!
         if (buffer.length >= 3 && (delay < 45 || !isInputFocused)) {
           e.preventDefault();
           e.stopPropagation();
@@ -143,96 +206,50 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
     };
-  }, [products]);
+  }, [products, boothId]);
 
   // Inventory Management Actions
   const handleAddProduct = (newProd) => {
-    setProducts((prev) => [newProd, ...prev]);
-    addToast(`Registered "${newProd.name}" in inventory database.`, 'success');
+    if (boothId) {
+      addProductRecord(boothId, newProd);
+    } else {
+      setProducts((prev) => [newProd, ...prev]);
+    }
+    addToast(`Registered "${newProd.name}" in inventory catalog.`, 'success');
   };
 
   const handleUpdateProduct = (updatedProd) => {
-    setProducts((prev) => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+    if (boothId) {
+      addProductRecord(boothId, updatedProd);
+    } else {
+      setProducts((prev) => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+    }
     addToast(`Updated product: ${updatedProd.name}`, 'info');
   };
 
   const handleDeleteProduct = (id) => {
     const prod = products.find(p => p.id === id);
-    setProducts((prev) => prev.filter(p => p.id !== id));
+    if (boothId) {
+      deleteProductRecord(boothId, id);
+    } else {
+      setProducts((prev) => prev.filter(p => p.id !== id));
+    }
     addToast(`Deleted "${prod?.name || 'product'}" from database.`, 'warning');
   };
 
   const handleResetInventory = () => {
     if (window.confirm("Are you sure you want to restore the default inventory catalog? This will overwrite custom products.")) {
-      setProducts(DEFAULT_PRODUCTS);
-      localStorage.removeItem('pos_products');
+      if (boothId) {
+        resetInventoryFirebase(boothId);
+      } else {
+        setProducts(DEFAULT_PRODUCTS);
+        localStorage.removeItem('pos_products');
+      }
       addToast("Restored default product catalog.", "info");
     }
   };
 
-  // Cart Management Actions
-  const handleUpdateCartQty = (id, newQty) => {
-    if (newQty <= 0) {
-      handleRemoveFromCart(id);
-      return;
-    }
-
-    const item = cart.find(c => c.id === id);
-    const prod = products.find(p => p.id === id);
-    const _qtyDiff = newQty - item.quantity;
-
-    // Check inventory levels
-    if (prod && prod.stock < _qtyDiff) {
-      addToast(`Cannot add more. Only ${prod.stock} items left in stock.`, 'warning');
-      return;
-    }
-
-    // Update cart
-    setCart((prev) => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
-    
-    // Update inventory
-    setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: p.stock - _qtyDiff } : p));
-  };
-
-  const handleRemoveFromCart = (id) => {
-    const item = cart.find(c => c.id === id);
-    if (!item) return;
-
-    // Restore stock
-    setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: p.stock + item.quantity } : p));
-    
-    // Remove from cart
-    setCart((prev) => prev.filter(c => c.id !== id));
-    addToast(`Removed "${item.name}" from cart.`, 'info');
-  };
-
-  const handleClearCart = () => {
-    // Restore all stocks for cart items
-    setProducts((prevProducts) => {
-      let updated = [...prevProducts];
-      cart.forEach(cartItem => {
-        updated = updated.map(p => 
-          p.id === cartItem.id 
-            ? { ...p, stock: p.stock + cartItem.quantity }
-            : p
-        );
-      });
-      return updated;
-    });
-
-    setCart([]);
-    setLastScannedItem(null);
-    addToast("Cart cleared.", "info");
-  };
-
-  // Checkout simulation logger
-  const handleCheckout = (receipt) => {
-    setSalesHistory((prev) => [receipt, ...prev]);
-    setCart([]);
-    setLastScannedItem(null);
-    addToast(`Transaction ${receipt.id} processed successfully!`, 'success');
-  };
-
+  // Custom Item sale injection (adds virtual art commissions directly to cart)
   const handleAddCustomCartItem = (name, price, category = 'Other') => {
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum <= 0) {
@@ -254,9 +271,109 @@ export default function App() {
     addToast(`Added custom "${customProduct.name}" ($${priceNum.toFixed(2)}) to cart.`, 'success');
   };
 
+  // Cart Management Actions
+  const handleUpdateCartQty = (id, newQty) => {
+    if (newQty <= 0) {
+      handleRemoveFromCart(id);
+      return;
+    }
+
+    const item = cart.find(c => c.id === id);
+    const prod = products.find(p => p.id === id);
+    const _qtyDiff = newQty - item.quantity;
+
+    if (prod && prod.id.startsWith('custom-')) {
+      // Virtual custom items have infinite stock
+      setCart((prev) => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
+      return;
+    }
+
+    if (prod && prod.stock < _qtyDiff) {
+      addToast(`Cannot add more. Only ${prod.stock} items left in stock.`, 'warning');
+      return;
+    }
+
+    setCart((prev) => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
+    
+    if (prod) {
+      const newStock = prod.stock - _qtyDiff;
+      if (boothId) {
+        updateProductStock(boothId, id, newStock);
+      } else {
+        setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: newStock } : p));
+      }
+    }
+  };
+
+  const handleRemoveFromCart = (id) => {
+    const item = cart.find(c => c.id === id);
+    if (!item) return;
+
+    if (!item.id.startsWith('custom-')) {
+      // Restore stock for catalog products
+      if (boothId) {
+        const prod = products.find(p => p.id === id);
+        if (prod) {
+          updateProductStock(boothId, id, prod.stock + item.quantity);
+        }
+      } else {
+        setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: p.stock + item.quantity } : p));
+      }
+    }
+    
+    setCart((prev) => prev.filter(c => c.id !== id));
+    addToast(`Removed "${item.name}" from cart.`, 'info');
+  };
+
+  const handleClearCart = () => {
+    // Restore all stocks for cart items
+    if (boothId) {
+      cart.forEach(cartItem => {
+        if (!cartItem.id.startsWith('custom-')) {
+          const prod = products.find(p => p.id === cartItem.id);
+          if (prod) {
+            updateProductStock(boothId, cartItem.id, prod.stock + cartItem.quantity);
+          }
+        }
+      });
+    } else {
+      setProducts((prevProducts) => {
+        let updated = [...prevProducts];
+        cart.forEach(cartItem => {
+          if (!cartItem.id.startsWith('custom-')) {
+            updated = updated.map(p => 
+              p.id === cartItem.id ? { ...p, stock: p.stock + cartItem.quantity } : p
+            );
+          }
+        });
+        return updated;
+      });
+    }
+
+    setCart([]);
+    setLastScannedItem(null);
+    addToast("Cart cleared.", "info");
+  };
+
+  // Checkout simulation logger
+  const handleCheckout = (receipt) => {
+    if (boothId) {
+      addSaleRecord(boothId, receipt);
+    } else {
+      setSalesHistory((prev) => [receipt, ...prev]);
+    }
+    setCart([]); 
+    setLastScannedItem(null);
+    addToast(`Transaction ${receipt.id} processed successfully!`, 'success');
+  };
+
   const handleResetSalesHistory = () => {
-    setSalesHistory([]);
-    localStorage.removeItem('pos_sales_history');
+    if (boothId) {
+      resetSalesFirebase(boothId);
+    } else {
+      setSalesHistory([]);
+      localStorage.removeItem('pos_sales_history');
+    }
     addToast("Sales ledger history has been reset.", "info");
   };
 
@@ -269,8 +386,62 @@ export default function App() {
           <div style={styles.brandLogo}>⚡</div>
           <div className="sidebar-brand-name">
             <h1 style={styles.brandTitle}>OmniScan POS</h1>
-            <span style={styles.brandSubtitle}>Retail Management v1.2</span>
+            <span style={styles.brandSubtitle}>Artist Ledger v2.0</span>
           </div>
+        </div>
+
+        {/* Real-Time Database Pairing Panel */}
+        <div className="sidebar-status-box glass-panel" style={{ marginTop: '0', marginBottom: '1.25rem', padding: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+            <span className={boothId ? "pulse-primary" : ""} style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: boothId ? 'var(--success)' : 'var(--warning)',
+              display: 'inline-block'
+            }}></span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: boothId ? 'var(--success)' : 'var(--warning)' }}>
+              {boothId ? 'CLOUD SYNC ACTIVE' : 'LOCAL OFFLINE STORAGE'}
+            </span>
+          </div>
+          
+          {boothId ? (
+            <div>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontFamily: 'monospace' }}>
+                Booth ID: <strong>{boothId}</strong>
+              </p>
+              <button 
+                className="btn btn-secondary" 
+                onClick={handleDisconnectBooth}
+                style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.75rem', height: '28px' }}
+              >
+                Disconnect Sync
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem', lineHeight: 1.3 }}>
+                Enter shared Booth Code to sync inventory in real-time across devices:
+              </p>
+              <form onSubmit={handleConnectBooth} style={{ display: 'flex', gap: '0.4rem' }}>
+                <input
+                  type="text"
+                  placeholder="Booth ID Code..."
+                  className="custom-input"
+                  style={{ flexGrow: 1, padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '28px' }}
+                  name="boothInput"
+                  required
+                />
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  style={{ padding: '0 0.5rem', fontSize: '0.75rem', height: '28px' }}
+                >
+                  Sync
+                </button>
+              </form>
+            </div>
+          )}
         </div>
 
         <nav className="app-sidebar-nav">
@@ -303,14 +474,14 @@ export default function App() {
           </button>
         </nav>
 
-        {/* Global Wedge Active status indicator */}
+        {/* Global Wedge Active status indicator (Local wedge still works alongside cloud db!) */}
         <div className="sidebar-status-box glass-panel">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
             <span className="pulse-primary" style={styles.statusDot}></span>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--success)' }}>SYSTEM LISTENING</span>
           </div>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
-            PC Scanner Wedge is globally active. Type or scan codes at any time.
+            Hardware barcode keyboard listener is globally active.
           </p>
         </div>
 
@@ -387,7 +558,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    marginBottom: '2.5rem',
+    marginBottom: '1.5rem', // Tighter spacing to accommodate Firebase box
   },
   brandLogo: {
     width: '40px',
