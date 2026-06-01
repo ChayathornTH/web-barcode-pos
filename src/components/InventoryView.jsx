@@ -1,62 +1,6 @@
 import { useState } from 'react';
 import { Plus, Search, Trash2, Edit3, X, Barcode as BarcodeIcon, RotateCcw, AlertTriangle } from 'lucide-react';
 
-// Custom lightweight barcode renderer
-function BarcodeVisualizer({ value }) {
-  // Deterministic fake EAN-13 line drawing
-  const lines = [];
-  let currentX = 10;
-  
-  // Use a hash of the value to generate a consistent line pattern
-  let hash = 5381;
-  for (let i = 0; i < value.length; i++) {
-    hash = ((hash << 5) + hash) + value.charCodeAt(i);
-  }
-  hash = Math.abs(hash);
-
-  for (let i = 0; i < 45; i++) {
-    const isGuard = i < 3 || (i > 20 && i < 23) || i > 41;
-    const bit = (hash >> (i % 24)) & 1;
-    const height = isGuard ? 55 : 46;
-    const barWidth = isGuard ? 1.5 : (bit === 1 ? 3 : 1.5);
-    const hasBar = (i % 2 === 0);
-
-    if (hasBar) {
-      lines.push(
-        <rect 
-          key={i} 
-          x={currentX} 
-          y={5} 
-          width={barWidth} 
-          height={height} 
-          fill="#1e293b" 
-        />
-      );
-    }
-    currentX += barWidth + (bit === 1 ? 1 : 1.5);
-  }
-
-  return (
-    <div style={styles.barcodeCard}>
-      <svg width="150" height="70" viewBox="0 0 160 70" style={{ display: 'block' }}>
-        <rect width="100%" height="100%" fill="#ffffff" rx="4" />
-        <g>{lines}</g>
-        <text 
-          x="80" 
-          y="64" 
-          textAnchor="middle" 
-          fontSize="9" 
-          fontFamily="monospace" 
-          fontWeight="700" 
-          fill="#1e293b"
-          letterSpacing="1.5"
-        >
-          {value}
-        </text>
-      </svg>
-    </div>
-  );
-}
 
 const CATEGORIES = [
   "Fresh Produce",
@@ -309,7 +253,10 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                   <div style={styles.emojiContainer}>{product.emoji}</div>
                 )}
                 <div style={{ flexGrow: 1, minWidth: 0 }}>
-                  <span style={styles.categoryBadge}>{product.category}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.15rem' }}>
+                    <span style={styles.categoryBadge}>{product.category}</span>
+                    <span style={styles.barcodeBadge}>#{product.barcode}</span>
+                  </div>
                   <h4 style={styles.productName}>{product.name}</h4>
                 </div>
               </div>
@@ -332,10 +279,6 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                 </div>
               </div>
 
-              {/* Visual Barcode display */}
-              <div style={styles.barcodeSection}>
-                <BarcodeVisualizer value={product.barcode} />
-              </div>
 
               {/* Action buttons */}
               <div style={styles.cardActions}>
@@ -687,6 +630,17 @@ const styles = {
     color: 'var(--accent)',
     letterSpacing: '0.05em',
   },
+  barcodeBadge: {
+    fontSize: '0.65rem',
+    fontWeight: 700,
+    color: 'var(--text-muted)',
+    fontFamily: 'monospace',
+    letterSpacing: '0.02em',
+    background: 'rgba(255, 255, 255, 0.04)',
+    padding: '0.15rem 0.35rem',
+    borderRadius: '4px',
+    border: '1px solid var(--border-color)',
+  },
   productName: {
     fontSize: '1rem',
     fontWeight: 700,
@@ -731,17 +685,7 @@ const styles = {
     fontWeight: 600,
     marginTop: '0.1rem',
   },
-  barcodeSection: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '0.5rem 0',
-  },
-  barcodeCard: {
-    borderRadius: '6px',
-    boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
-    border: '1px solid rgba(0,0,0,0.05)',
-  },
+
   cardActions: {
     display: 'flex',
     justifyContent: 'space-between',
