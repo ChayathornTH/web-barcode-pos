@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { DollarSign, FileText, ShoppingBag, TrendingUp, Calendar, ArrowUpRight, Eye, Printer, X, Download, Trash2 } from 'lucide-react';
 
 export default function DashboardView({ salesHistory, onResetSalesHistory }) {
@@ -32,7 +32,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
         if (isAM && hr === 12) hr = 0;
         hour = hr;
       }
-    } catch (e) {
+    } catch {
       hour = 12;
     }
     
@@ -411,10 +411,12 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                   <span>Subtotal</span>
                   <span>${selectedReceipt.subtotal.toFixed(2)}</span>
                 </div>
-                <div style={styles.receiptTotalRow}>
-                  <span>Tax (7%)</span>
-                  <span>${selectedReceipt.tax.toFixed(2)}</span>
-                </div>
+                {selectedReceipt.tax > 0 && (
+                  <div style={styles.receiptTotalRow}>
+                    <span>Tax (7%)</span>
+                    <span>${selectedReceipt.tax.toFixed(2)}</span>
+                  </div>
+                )}
                 {selectedReceipt.discount.amount > 0 && (
                   <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
                     <span>Discount ({selectedReceipt.discount.code})</span>

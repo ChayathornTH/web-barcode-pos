@@ -1,7 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Sparkles, Plus, Minus, Trash2, Printer, CheckCircle, Grid } from 'lucide-react';
 
 const CATEGORIES = ['All', 'Paintings', 'Prints', 'Stickers', 'Accessories', 'Stationery'];
+
+const generateReceiptId = () => `REC-${Math.floor(100000 + Math.random() * 900000)}`;
 
 export default function PosView({ 
   products,
@@ -37,7 +39,7 @@ export default function PosView({
   const manualInputRef = useRef(null);
 
   // Play audio beep on scan success
-  const playBeep = () => {
+  const playBeep = useCallback(() => {
     if (isMuted) return;
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -56,14 +58,14 @@ export default function PosView({
     } catch (e) {
       console.warn("Audio Context beep failed", e);
     }
-  };
+  }, [isMuted]);
 
   // Listen for barcode scan trigger from parent
   useEffect(() => {
     if (lastScannedItem) {
       playBeep();
     }
-  }, [lastScannedItem]);
+  }, [lastScannedItem, playBeep]);
 
   // Handle barcode from manual form
   const handleManualSubmit = (e) => {
@@ -113,7 +115,7 @@ export default function PosView({
 
   // Calculations
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const tax = subtotal * 0.07; // 7% tax
+  const tax = 0; // VAT removed
   
   let discountAmount = 0;
   if (appliedDiscount.percent === 'flat-5') {
@@ -129,7 +131,7 @@ export default function PosView({
     if (cart.length === 0) return;
 
     const receipt = {
-      id: `REC-${Math.floor(100000 + Math.random() * 900000)}`,
+      id: generateReceiptId(),
       timestamp: new Date().toLocaleString(),
       items: [...cart],
       subtotal,
@@ -392,10 +394,12 @@ export default function PosView({
                   <span>Subtotal</span>
                   <span>${subtotal.toFixed(2)}</span>
                 </div>
-                <div style={styles.summaryRow}>
-                  <span>Tax (7%)</span>
-                  <span>${tax.toFixed(2)}</span>
-                </div>
+                {tax > 0 && (
+                  <div style={styles.summaryRow}>
+                    <span>Tax (7%)</span>
+                    <span>${tax.toFixed(2)}</span>
+                  </div>
+                )}
 
                 {appliedDiscount.code && (
                   <div style={{ ...styles.summaryRow, color: 'var(--success)' }}>
@@ -511,10 +515,12 @@ export default function PosView({
                   <span>Subtotal</span>
                   <span>${receiptData.subtotal.toFixed(2)}</span>
                 </div>
-                <div style={styles.receiptTotalRow}>
-                  <span>Tax (7%)</span>
-                  <span>${receiptData.tax.toFixed(2)}</span>
-                </div>
+                {receiptData.tax > 0 && (
+                  <div style={styles.receiptTotalRow}>
+                    <span>Tax (7%)</span>
+                    <span>${receiptData.tax.toFixed(2)}</span>
+                  </div>
+                )}
                 {receiptData.discount.amount > 0 && (
                   <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
                     <span>Discount ({receiptData.discount.code})</span>

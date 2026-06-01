@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DEFAULT_PRODUCTS } from './data/mockProducts';
 import PosView from './components/PosView';
 import InventoryView from './components/InventoryView';
 import DashboardView from './components/DashboardView';
-import { ShoppingCart, Database, Barcode, LayoutDashboard, Settings, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Database, LayoutDashboard, Settings, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { 
   subscribeToProducts, 
   subscribeToSalesHistory, 
@@ -44,7 +44,17 @@ export default function App() {
   // UI States
   const [lastScannedItem, setLastScannedItem] = useState(null);
   const [toasts, setToasts] = useState([]);
-  const [globalScanTrigger, setGlobalScanTrigger] = useState(0);
+
+  // Floating Toast Notification Helper
+  const addToast = (message, type = 'info') => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    
+    // Auto remove after 3.5s
+    setTimeout(() => {
+      setToasts((prev) => prev.filter(t => t.id !== id));
+    }, 3500);
+  };
 
   // Sync LOCAL states to local storage (only when NOT using cloud sync)
   useEffect(() => {
@@ -67,7 +77,9 @@ export default function App() {
   useEffect(() => {
     if (!boothId) return;
 
-    addToast(`Syncing with cloud booth: "${boothId}"`, 'info');
+    const timer = setTimeout(() => {
+      addToast(`Syncing with cloud booth: "${boothId}"`, 'info');
+    }, 0);
     
     // Subscribe to products sub-collection
     const unsubscribeProds = subscribeToProducts(boothId, (items) => {
@@ -80,21 +92,13 @@ export default function App() {
     });
 
     return () => {
+      clearTimeout(timer);
       unsubscribeProds();
       unsubscribeSales();
     };
   }, [boothId]);
 
-  // Floating Toast Notification Helper
-  const addToast = (message, type = 'info') => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    
-    // Auto remove after 3.5s
-    setTimeout(() => {
-      setToasts((prev) => prev.filter(t => t.id !== id));
-    }, 3500);
-  };
+
 
   // Connect to a shared Cloud Booth
   const handleConnectBooth = (e) => {
@@ -124,7 +128,7 @@ export default function App() {
   };
 
   // Centralized scan barcode action
-  const handleScanEvent = (barcodeString) => {
+  const handleScanEvent = useCallback((barcodeString) => {
     // Look up item
     const matchedProduct = products.find(p => p.barcode === barcodeString);
 
@@ -167,10 +171,9 @@ export default function App() {
       return true;
     } else {
       addToast(`Unknown Barcode: "${barcodeString}". Register it in inventory.`, 'error');
-      setGlobalScanTrigger(prev => prev + 1);
       return false;
     }
-  };
+  }, [products, boothId]);
 
   // Keyboard wedge listener for physical barcode scanners
   useEffect(() => {
@@ -207,7 +210,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
     };
-  }, [products, boothId]);
+  }, [handleScanEvent]);
 
   // Inventory Management Actions
   const handleAddProduct = (newProd) => {
