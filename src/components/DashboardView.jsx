@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { DollarSign, FileText, ShoppingBag, TrendingUp, Calendar, ArrowUpRight, Eye, Printer, X } from 'lucide-react';
+import { DollarSign, FileText, ShoppingBag, TrendingUp, Calendar, ArrowUpRight, Eye, Printer, X, Download, Trash2 } from 'lucide-react';
 
-export default function DashboardView({ salesHistory }) {
+export default function DashboardView({ salesHistory, onResetSalesHistory }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
 
   // Stats Calculations
@@ -64,6 +64,53 @@ export default function DashboardView({ salesHistory }) {
     }))
     .sort((a, b) => b.amount - a.amount);
 
+  // Export ledger list to CSV format
+  const handleExportCSV = () => {
+    if (salesHistory.length === 0) return;
+    
+    const headers = [
+      "Receipt ID", 
+      "Timestamp", 
+      "Product Name", 
+      "Category", 
+      "Quantity", 
+      "Unit Price ($)", 
+      "Line Subtotal ($)", 
+      "Coupon Code", 
+      "Discount Applied ($)", 
+      "Invoice Grand Total ($)"
+    ];
+    
+    const rows = [];
+    salesHistory.forEach(sale => {
+      sale.items.forEach(item => {
+        rows.push([
+          sale.id,
+          sale.timestamp,
+          item.name,
+          item.category,
+          item.quantity,
+          item.price.toFixed(2),
+          (item.price * item.quantity).toFixed(2),
+          sale.discount.code || "None",
+          sale.discount.amount.toFixed(2),
+          sale.total.toFixed(2)
+        ]);
+      });
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `artfest_sales_ledger_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div style={styles.viewContainer}>
       <div style={styles.header}>
@@ -72,6 +119,24 @@ export default function DashboardView({ salesHistory }) {
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
             Real-time business insights, revenue statistics, and item velocities.
           </p>
+        </div>
+        
+        {/* Dashboard Actions */}
+        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+          {salesHistory.length > 0 && (
+            <>
+              <button className="btn btn-secondary" onClick={handleExportCSV}>
+                <Download size={14} /> Export CSV
+              </button>
+              <button className="btn btn-danger" onClick={() => {
+                if (window.confirm("Are you sure you want to reset all transaction history logs? This will delete all past session sales data permanently.")) {
+                  onResetSalesHistory();
+                }
+              }}>
+                <Trash2 size={14} /> Reset Session
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -155,8 +220,8 @@ export default function DashboardView({ salesHistory }) {
               })}
 
               {hourlyBuckets.map((bucket, index) => {
-                const barWidth = 14; // narrower to fit screens
-                const x = 45 + index * 26; // tighter step to avoid layout overflow on mobile
+                const barWidth = 14; 
+                const x = 45 + index * 26; 
                 const barHeight = (bucket.amount / maxHourlySales) * 150;
                 const y = 180 - barHeight;
                 const isHovered = bucket.amount > 0;
@@ -312,7 +377,7 @@ export default function DashboardView({ salesHistory }) {
             <div id="printable-history-receipt" style={styles.receiptBody}>
               <div style={styles.receiptHeader}>
                 <div style={styles.receiptLogo}>⚡ OMNISCAN POS</div>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.2rem' }}>OmniScan Retail Ltd.</div>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.2rem' }}>Art Fair Artist Ledger</div>
                 <div style={{ borderBottom: '1px dashed #cbd5e1', margin: '1rem 0' }}></div>
               </div>
 
@@ -347,7 +412,7 @@ export default function DashboardView({ salesHistory }) {
                   <span>${selectedReceipt.subtotal.toFixed(2)}</span>
                 </div>
                 <div style={styles.receiptTotalRow}>
-                  <span>Vat Tax (7%)</span>
+                  <span>Tax (7%)</span>
                   <span>${selectedReceipt.tax.toFixed(2)}</span>
                 </div>
                 {selectedReceipt.discount.amount > 0 && (
@@ -413,6 +478,8 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '1rem',
   },
   statCard: {
     padding: '1.25rem',

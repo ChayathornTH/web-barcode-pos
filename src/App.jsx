@@ -233,6 +233,33 @@ export default function App() {
     addToast(`Transaction ${receipt.id} processed successfully!`, 'success');
   };
 
+  const handleAddCustomCartItem = (name, price, category = 'Other') => {
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      addToast("Invalid custom item price.", "error");
+      return;
+    }
+    const customProduct = {
+      id: `custom-${Date.now()}`,
+      barcode: `custom-${Date.now()}`,
+      name: name.trim() || 'Custom Item',
+      price: priceNum,
+      category: category,
+      stock: 999,
+      emoji: "🎨",
+      description: "Custom commissioned art item."
+    };
+
+    setCart((prev) => [...prev, { ...customProduct, quantity: 1 }]);
+    addToast(`Added custom "${customProduct.name}" ($${priceNum.toFixed(2)}) to cart.`, 'success');
+  };
+
+  const handleResetSalesHistory = () => {
+    setSalesHistory([]);
+    localStorage.removeItem('pos_sales_history');
+    addToast("Sales ledger history has been reset.", "info");
+  };
+
   return (
     <div className="app-container">
       
@@ -304,6 +331,7 @@ export default function App() {
             onManualScan={handleScanEvent}
             onCheckout={handleCheckout}
             lastScannedItem={lastScannedItem}
+            onAddCustomItem={handleAddCustomCartItem}
           />
         )}
 
@@ -321,6 +349,7 @@ export default function App() {
         {activeView === 'dashboard' && (
           <DashboardView 
             salesHistory={salesHistory}
+            onResetSalesHistory={handleResetSalesHistory}
           />
         )}
       </main>

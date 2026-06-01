@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Sparkles, Plus, Minus, Trash2, Printer, CheckCircle, Grid, Filter } from 'lucide-react';
+import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Sparkles, Plus, Minus, Trash2, Printer, CheckCircle, Grid } from 'lucide-react';
 
 const CATEGORIES = ['All', 'Paintings', 'Prints', 'Stickers', 'Accessories', 'Stationery'];
 
@@ -11,12 +11,19 @@ export default function PosView({
   onClearCart, 
   onManualScan, 
   onCheckout,
-  lastScannedItem 
+  lastScannedItem,
+  onAddCustomItem // Prop to handle custom charge commissions
 }) {
   const [catalogSearch, setCatalogSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeMobileTab, setActiveMobileTab] = useState('catalog'); // 'catalog' | 'cart'
   
+  // Custom Charge States
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
+  const [customCategory, setCustomCategory] = useState('Other');
+
   const [manualCode, setManualCode] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [discountCode, setDiscountCode] = useState('');
@@ -242,43 +249,57 @@ export default function PosView({
             </div>
 
             {/* Catalog Grid */}
-            {filteredCatalogProducts.length === 0 ? (
-              <div style={styles.emptyCatalog}>
-                <Grid size={40} color="var(--text-muted)" style={{ opacity: 0.3, marginBottom: '0.75rem' }} />
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>No products found in this category.</p>
+            <div className="catalog-grid" style={{ padding: '0.25rem 0' }}>
+              
+              {/* Special Custom Item Card (Always first) */}
+              <div 
+                className="glass-panel glass-panel-hover catalog-card glow-primary"
+                onClick={() => setIsCustomModalOpen(true)}
+                style={{
+                  ...styles.cardClickReset,
+                  border: '1px dashed var(--primary)',
+                  backgroundColor: 'rgba(139, 92, 246, 0.04)',
+                  cursor: 'pointer'
+                }}
+                title="Add custom price or sketch sale"
+              >
+                <div className="catalog-card-emoji" style={{ background: 'var(--primary-glow)', color: 'var(--primary)' }}>➕</div>
+                <div className="catalog-card-name" style={{ color: 'var(--primary)' }}>Custom Sale</div>
+                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                  <div className="catalog-card-price" style={{ color: 'var(--primary)' }}>Add Price</div>
+                  <div className="catalog-card-stock" style={{ color: 'var(--primary)' }}>Open charge</div>
+                </div>
               </div>
-            ) : (
-              <div className="catalog-grid" style={{ padding: '0.25rem 0' }}>
-                {filteredCatalogProducts.map(product => {
-                  const isOutOfStock = product.stock === 0;
-                  return (
-                    <div 
-                      key={product.id} 
-                      className={`glass-panel glass-panel-hover catalog-card ${isOutOfStock ? 'disabled' : ''}`}
-                      onClick={() => handleProductClick(product)}
-                      style={{
-                        ...styles.cardClickReset,
-                        opacity: isOutOfStock ? 0.45 : 1,
-                        cursor: isOutOfStock ? 'not-allowed' : 'pointer',
-                        border: isOutOfStock ? '1px dashed var(--border-color)' : '1px solid var(--border-color)'
-                      }}
-                      title={isOutOfStock ? "Out of stock" : `Tap to add: ${product.name}`}
-                    >
-                      <div className="catalog-card-emoji">{product.emoji}</div>
-                      <div className="catalog-card-name">{product.name}</div>
-                      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <div className="catalog-card-price">${product.price.toFixed(2)}</div>
-                        <div className="catalog-card-stock" style={{
-                          color: isOutOfStock ? 'var(--danger)' : product.stock < 5 ? 'var(--warning)' : 'var(--text-muted)'
-                        }}>
-                          {isOutOfStock ? "Sold Out" : `${product.stock} left`}
-                        </div>
+
+              {filteredCatalogProducts.map(product => {
+                const isOutOfStock = product.stock === 0;
+                return (
+                  <div 
+                    key={product.id} 
+                    className={`glass-panel glass-panel-hover catalog-card ${isOutOfStock ? 'disabled' : ''}`}
+                    onClick={() => handleProductClick(product)}
+                    style={{
+                      ...styles.cardClickReset,
+                      opacity: isOutOfStock ? 0.45 : 1,
+                      cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                      border: isOutOfStock ? '1px dashed var(--border-color)' : '1px solid var(--border-color)'
+                    }}
+                    title={isOutOfStock ? "Out of stock" : `Tap to add: ${product.name}`}
+                  >
+                    <div className="catalog-card-emoji">{product.emoji}</div>
+                    <div className="catalog-card-name">{product.name}</div>
+                    <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                      <div className="catalog-card-price">${product.price.toFixed(2)}</div>
+                      <div className="catalog-card-stock" style={{
+                        color: isOutOfStock ? 'var(--danger)' : product.stock < 5 ? 'var(--warning)' : 'var(--text-muted)'
+                      }}>
+                        {isOutOfStock ? "Sold Out" : `${product.stock} left`}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Barcode input row (For hardware scanning) */}
@@ -526,6 +547,83 @@ export default function PosView({
           </div>
         </div>
       )}
+
+      {/* Custom Price / Charge Modal */}
+      {isCustomModalOpen && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel" style={styles.receiptContainer}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+              <h3 style={{ color: 'var(--text-primary)' }}>➕ Add Custom Charge</h3>
+              <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.25rem' }} onClick={() => setIsCustomModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              onAddCustomItem(customName || 'Custom Art Item', customPrice, customCategory);
+              setCustomName('');
+              setCustomPrice('');
+              setCustomCategory('Other');
+              setIsCustomModalOpen(false);
+            }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.25rem' }}>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Price ($) *</label>
+                <input 
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  placeholder="0.00"
+                  className="custom-input"
+                  value={customPrice}
+                  onChange={(e) => setCustomPrice(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Item Name (Optional)</label>
+                <input 
+                  type="text"
+                  placeholder="E.g., Custom Pencil Sketch"
+                  className="custom-input"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Category</label>
+                <select 
+                  className="custom-input"
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="Paintings">Paintings</option>
+                  <option value="Prints">Prints</option>
+                  <option value="Stickers">Stickers</option>
+                  <option value="Accessories">Accessories</option>
+                  <option value="Stationery">Stationery</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsCustomModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Add to Cart
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
