@@ -111,6 +111,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   const [category, setCategory] = useState('Other');
   const [stock, setStock] = useState('');
   const [description, setDescription] = useState('');
+  const [image, setImage] = useState('');
   const [formError, setFormError] = useState('');
 
   // Handle Edit click
@@ -122,6 +123,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setCategory(product.category);
     setStock(product.stock.toString());
     setDescription(product.description || '');
+    setImage(product.image || '');
     setIsModalOpen(true);
   };
 
@@ -134,6 +136,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setCategory('Other');
     setStock('');
     setDescription('');
+    setImage('');
     setFormError('');
     setIsModalOpen(true);
   };
@@ -149,6 +152,21 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     }
     const checksum = (10 - (sum % 10)) % 10;
     setBarcode(random12Digits + checksum);
+  };
+
+  const handleImageFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        setFormError('Image size must be less than 2MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImage(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Handle Form Submit
@@ -192,7 +210,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         category,
         stock: stockNum,
         description,
-        emoji
+        emoji,
+        image
       });
     } else {
       // Add
@@ -204,7 +223,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         category,
         stock: stockNum,
         description,
-        emoji
+        emoji,
+        image
       });
     }
 
@@ -281,7 +301,13 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
           filteredProducts.map(product => (
             <div key={product.id} className="glass-panel glass-panel-hover" style={styles.productCard}>
               <div style={styles.cardHeader}>
-                <div style={styles.emojiContainer}>{product.emoji}</div>
+                {product.image ? (
+                  <div style={styles.imageContainer}>
+                    <img src={product.image} alt={product.name} style={styles.productCardImage} />
+                  </div>
+                ) : (
+                  <div style={styles.emojiContainer}>{product.emoji}</div>
+                )}
                 <div style={{ flexGrow: 1, minWidth: 0 }}>
                   <span style={styles.categoryBadge}>{product.category}</span>
                   <h4 style={styles.productName}>{product.name}</h4>
@@ -447,6 +473,55 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
               </div>
 
               <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Product Image</label>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                  {image && (
+                    <div style={styles.imagePreviewContainer}>
+                      <img src={image} alt="Preview" style={styles.imagePreview} />
+                      <button 
+                        type="button" 
+                        onClick={() => setImage('')} 
+                        style={styles.imageRemoveBtn}
+                        title="Remove image"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flexGrow: 1 }}>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleImageFileChange} 
+                      style={{ display: 'none' }}
+                      id="product-image-file"
+                    />
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <label 
+                        htmlFor="product-image-file" 
+                        className="btn btn-secondary" 
+                        style={{ cursor: 'pointer', padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                      >
+                        Upload Image
+                      </label>
+                      <input 
+                        type="text" 
+                        className="custom-input"
+                        style={{ flexGrow: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                        placeholder="Or paste image URL..."
+                        value={image.startsWith('data:') ? 'Local Image Loaded' : image}
+                        disabled={image.startsWith('data:')}
+                        onChange={(e) => setImage(e.target.value)}
+                      />
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Max size 2MB. Stored locally or synced in cloud.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Description</label>
                 <textarea 
                   className="custom-input"
@@ -554,6 +629,56 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  imageContainer: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '10px',
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid var(--border-color)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'hidden',
+  },
+  productCardImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    width: '64px',
+    height: '64px',
+    borderRadius: '8px',
+    border: '1px solid var(--border-color)',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  imageRemoveBtn: {
+    position: 'absolute',
+    top: '2px',
+    right: '2px',
+    background: 'rgba(239, 68, 68, 0.85)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '50%',
+    width: '18px',
+    height: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    padding: 0,
+    lineHeight: 1,
   },
   categoryBadge: {
     fontSize: '0.7rem',

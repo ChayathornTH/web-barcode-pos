@@ -273,6 +273,29 @@ h1, h2, h3, h4, h5, h6 {
   transform: scale(1.1) rotate(5deg);
 }
 
+.catalog-card-image-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  transition: transform var(--transition-fast);
+}
+
+.catalog-card:hover .catalog-card-image-wrapper {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.catalog-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .catalog-card:active {
   transform: scale(0.97);
 }
@@ -468,6 +491,11 @@ h1, h2, h3, h4, h5, h6 {
 
   .catalog-card-emoji {
     font-size: 1.8rem;
+    width: 48px;
+    height: 48px;
+  }
+
+  .catalog-card-image-wrapper {
     width: 48px;
     height: 48px;
   }

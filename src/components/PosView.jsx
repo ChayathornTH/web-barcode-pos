@@ -288,7 +288,13 @@ export default function PosView({
                     }}
                     title={isOutOfStock ? "Out of stock" : `Tap to add: ${product.name}`}
                   >
-                    <div className="catalog-card-emoji">{product.emoji}</div>
+                    {product.image ? (
+                      <div className="catalog-card-image-wrapper">
+                        <img src={product.image} alt={product.name} className="catalog-card-img" />
+                      </div>
+                    ) : (
+                      <div className="catalog-card-emoji">{product.emoji}</div>
+                    )}
                     <div className="catalog-card-name">{product.name}</div>
                     <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                       <div className="catalog-card-price">${product.price.toFixed(2)}</div>
