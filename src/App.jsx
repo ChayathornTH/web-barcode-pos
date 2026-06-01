@@ -105,6 +105,7 @@ export default function App() {
     setBoothId(code);
     localStorage.setItem('pos_booth_id', code);
     addToast(`Connected to Shared Cloud Booth: "${code}"`, "success");
+    setActiveView('terminal'); // Switch back to POS view on connect
   };
 
   // Disconnect from cloud and fall back to local storage
@@ -283,7 +284,6 @@ export default function App() {
     const _qtyDiff = newQty - item.quantity;
 
     if (prod && prod.id.startsWith('custom-')) {
-      // Virtual custom items have infinite stock
       setCart((prev) => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
       return;
     }
@@ -310,7 +310,6 @@ export default function App() {
     if (!item) return;
 
     if (!item.id.startsWith('custom-')) {
-      // Restore stock for catalog products
       if (boothId) {
         const prod = products.find(p => p.id === id);
         if (prod) {
@@ -326,7 +325,6 @@ export default function App() {
   };
 
   const handleClearCart = () => {
-    // Restore all stocks for cart items
     if (boothId) {
       cart.forEach(cartItem => {
         if (!cartItem.id.startsWith('custom-')) {
@@ -390,60 +388,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Real-Time Database Pairing Panel */}
-        <div className="sidebar-status-box glass-panel" style={{ marginTop: '0', marginBottom: '1.25rem', padding: '0.85rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
-            <span className={boothId ? "pulse-primary" : ""} style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: boothId ? 'var(--success)' : 'var(--warning)',
-              display: 'inline-block'
-            }}></span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: boothId ? 'var(--success)' : 'var(--warning)' }}>
-              {boothId ? 'CLOUD SYNC ACTIVE' : 'LOCAL OFFLINE STORAGE'}
-            </span>
-          </div>
-          
-          {boothId ? (
-            <div>
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontFamily: 'monospace' }}>
-                Booth ID: <strong>{boothId}</strong>
-              </p>
-              <button 
-                className="btn btn-secondary" 
-                onClick={handleDisconnectBooth}
-                style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.75rem', height: '28px' }}
-              >
-                Disconnect Sync
-              </button>
-            </div>
-          ) : (
-            <div>
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem', lineHeight: 1.3 }}>
-                Enter shared Booth Code to sync inventory in real-time across devices:
-              </p>
-              <form onSubmit={handleConnectBooth} style={{ display: 'flex', gap: '0.4rem' }}>
-                <input
-                  type="text"
-                  placeholder="Booth ID Code..."
-                  className="custom-input"
-                  style={{ flexGrow: 1, padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '28px' }}
-                  name="boothInput"
-                  required
-                />
-                <button 
-                  type="submit" 
-                  className="btn btn-primary" 
-                  style={{ padding: '0 0.5rem', fontSize: '0.75rem', height: '28px' }}
-                >
-                  Sync
-                </button>
-              </form>
-            </div>
-          )}
-        </div>
-
         <nav className="app-sidebar-nav">
           <button 
             className={`btn ${activeView === 'terminal' ? 'btn-primary glow-primary' : 'btn-secondary'}`}
@@ -472,16 +416,25 @@ export default function App() {
             <LayoutDashboard size={18} />
             <span>Sales Dashboard</span>
           </button>
+
+          <button 
+            className={`btn ${activeView === 'settings' ? 'btn-primary glow-primary' : 'btn-secondary'}`}
+            style={styles.navBtn}
+            onClick={() => setActiveView('settings')}
+          >
+            <Settings size={18} />
+            <span>Cloud Sync</span>
+          </button>
         </nav>
 
-        {/* Global Wedge Active status indicator (Local wedge still works alongside cloud db!) */}
+        {/* Global Wedge Active status indicator */}
         <div className="sidebar-status-box glass-panel">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
             <span className="pulse-primary" style={styles.statusDot}></span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--success)' }}>SYSTEM LISTENING</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--success)' }}>SYSTEM ACTIVE</span>
           </div>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
-            Hardware barcode keyboard listener is globally active.
+            PC scanner and cloud services are active.
           </p>
         </div>
 
@@ -523,6 +476,67 @@ export default function App() {
             onResetSalesHistory={handleResetSalesHistory}
           />
         )}
+
+        {activeView === 'settings' && (
+          <div className="glass-panel" style={{ padding: '2rem', maxWidth: '500px', margin: '0 auto' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', fontFamily: 'var(--font-heading)' }}>
+              <Settings color="var(--primary)" /> Cloud Synchronization
+            </h2>
+            
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+              Synchronize your product catalog, pricing, stock levels, and sales history across multiple devices (PC and phones) in real-time.
+            </p>
+
+            <div className="glass-panel" style={{ padding: '1.25rem', background: 'rgba(0,0,0,0.15)', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <span className={boothId ? "pulse-primary" : ""} style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: boothId ? 'var(--success)' : 'var(--warning)',
+                  display: 'inline-block'
+                }}></span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: boothId ? 'var(--success)' : 'var(--warning)' }}>
+                  {boothId ? 'CLOUD STORAGE ACTIVE (ONLINE)' : 'LOCAL OFFLINE STORAGE'}
+                </span>
+              </div>
+
+              {boothId ? (
+                <div>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '1rem' }}>
+                    Connected to Shared Booth ID: <strong style={{ color: 'var(--accent)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>{boothId}</strong>
+                  </p>
+                  <button className="btn btn-danger" onClick={handleDisconnectBooth} style={{ width: '100%' }}>
+                    Disconnect Sync
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: '1.4' }}>
+                    Enter a shared Booth ID code (e.g. <code>ARTBOOTH12</code>) to sync. Multiple devices using the same code share databases instantly!
+                  </p>
+                  <form onSubmit={handleConnectBooth} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <input
+                      type="text"
+                      placeholder="Enter Booth ID Code..."
+                      className="custom-input"
+                      style={{ textTransform: 'uppercase' }}
+                      name="boothInput"
+                      required
+                    />
+                    <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+                      Enable Real-Time Cloud Sync
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+              <strong>Note:</strong> Connecting to a shared cloud booth fetches the current cloud inventory. If the booth ID is new, it seeds automatically with Art Fest defaults. Disconnecting returns you to offline files.
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Toast Notification Container */}
@@ -558,7 +572,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    marginBottom: '1.5rem', // Tighter spacing to accommodate Firebase box
+    marginBottom: '2.5rem',
   },
   brandLogo: {
     width: '40px',
