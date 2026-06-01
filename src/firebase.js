@@ -14,15 +14,15 @@ import {
 } from "firebase/firestore";
 import { DEFAULT_PRODUCTS } from "./data/mockProducts";
 
-// User's Firebase configuration
+// User's Firebase configuration read from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyAyO_3WOqvXbTiMnBO6qQt3NBjbwbqNzeM",
-  authDomain: "ch-pos-76514.firebaseapp.com",
-  projectId: "ch-pos-76514",
-  storageBucket: "ch-pos-76514.firebasestorage.app",
-  messagingSenderId: "204568493457",
-  appId: "1:204568493457:web:7e0778e665012f33ef2e30",
-  measurementId: "G-83ZQDPVD2E"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
