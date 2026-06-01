@@ -7,6 +7,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Paintings",
     stock: 5,
     emoji: "🎨",
+    image: "/web-barcode-pos/product-images/acrylic_canvas.png",
     description: "Hand-painted original acrylic canvas with easel."
   },
   {
@@ -17,6 +18,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Paintings",
     stock: 3,
     emoji: "🌸",
+    image: "/web-barcode-pos/product-images/watercolor_landscape.png",
     description: "Original watercolor on high-grade archival paper."
   },
   {
@@ -27,6 +29,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Stickers",
     stock: 60,
     emoji: "✨",
+    image: "/web-barcode-pos/product-images/holo_stickers.png",
     description: "Waterproof, die-cut holographic vinyl stickers."
   },
   {
@@ -37,6 +40,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Prints",
     stock: 25,
     emoji: "🖼️",
+    image: "/web-barcode-pos/product-images/starry_sky_print.png",
     description: "Premium matte print of the original oil painting."
   },
   {
