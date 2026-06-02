@@ -65,11 +65,11 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   const [setGroupName, setSetGroupName] = useState('');
   const [groupSelectValue, setGroupSelectValue] = useState('');
   const [tier1Qty, setTier1Qty] = useState('1');
-  const [tier1Discount, setTier1Discount] = useState('');
+  const [tier1Price, setTier1Price] = useState('');
   const [tier2Qty, setTier2Qty] = useState('');
-  const [tier2Discount, setTier2Discount] = useState('');
+  const [tier2Price, setTier2Price] = useState('');
   const [tier3Qty, setTier3Qty] = useState('');
-  const [tier3Discount, setTier3Discount] = useState('');
+  const [tier3Price, setTier3Price] = useState('');
   const [formError, setFormError] = useState('');
 
   // Handle Edit click
@@ -93,18 +93,18 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
       setGroupSelectValue('');
     }
     const tiers = product.setTiers || [];
-    const getDiscountVal = (t) => {
+    const getPriceVal = (t) => {
       if (!t) return '';
-      if (t.discount !== undefined) return t.discount.toString();
-      if (t.price !== undefined) return Math.max(0, product.price * t.quantity - t.price).toString();
+      if (t.price !== undefined) return t.price.toString();
+      if (t.discount !== undefined) return Math.max(0, product.price * t.quantity - t.discount).toString();
       return '';
     };
     setTier1Qty(tiers[0]?.quantity?.toString() || '1');
-    setTier1Discount(getDiscountVal(tiers[0]) || '0');
+    setTier1Price(getPriceVal(tiers[0]) || product.price.toString());
     setTier2Qty(tiers[1]?.quantity?.toString() || '');
-    setTier2Discount(getDiscountVal(tiers[1]));
+    setTier2Price(getPriceVal(tiers[1]));
     setTier3Qty(tiers[2]?.quantity?.toString() || '');
-    setTier3Discount(getDiscountVal(tiers[2]));
+    setTier3Price(getPriceVal(tiers[2]));
     setIsModalOpen(true);
   };
 
@@ -122,11 +122,11 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setSetGroupName('');
     setGroupSelectValue('');
     setTier1Qty('1');
-    setTier1Discount('');
+    setTier1Price('');
     setTier2Qty('');
-    setTier2Discount('');
+    setTier2Price('');
     setTier3Qty('');
-    setTier3Discount('');
+    setTier3Price('');
     setFormError('');
     setIsModalOpen(true);
   };
@@ -137,29 +137,29 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     if (val === '__new__') {
       setSetGroupName('');
       setTier1Qty('1');
-      setTier1Discount('0');
+      setTier1Price(price || '10.00');
       setTier2Qty('');
-      setTier2Discount('');
+      setTier2Price('');
       setTier3Qty('');
-      setTier3Discount('');
+      setTier3Price('');
     } else if (val === '') {
       setSetGroupName('');
     } else {
       setSetGroupName(val);
       const tiers = availableGroups[val] || [];
       const basePrice = parseFloat(price) || 0;
-      const getDiscountVal = (t) => {
+      const getPriceVal = (t) => {
         if (!t) return '';
-        if (t.discount !== undefined) return t.discount.toString();
-        if (t.price !== undefined) return Math.max(0, basePrice * t.quantity - t.price).toString();
+        if (t.price !== undefined) return t.price.toString();
+        if (t.discount !== undefined) return Math.max(0, basePrice * t.quantity - t.discount).toString();
         return '';
       };
       setTier1Qty(tiers[0]?.quantity?.toString() || '1');
-      setTier1Discount(getDiscountVal(tiers[0]) || '0');
+      setTier1Price(getPriceVal(tiers[0]) || basePrice.toString());
       setTier2Qty(tiers[1]?.quantity?.toString() || '');
-      setTier2Discount(getDiscountVal(tiers[1]));
+      setTier2Price(getPriceVal(tiers[1]));
       setTier3Qty(tiers[2]?.quantity?.toString() || '');
-      setTier3Discount(getDiscountVal(tiers[2]));
+      setTier3Price(getPriceVal(tiers[2]));
     }
   };
 
@@ -225,14 +225,23 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     // Construct set pricing tiers if enabled
     const setTiers = [];
     if (isSetPriced) {
-      if (tier1Qty && tier1Discount) {
-        setTiers.push({ quantity: parseInt(tier1Qty), discount: parseFloat(tier1Discount) });
+      if (tier1Qty && tier1Price) {
+        const qty = parseInt(tier1Qty);
+        const tPrice = parseFloat(tier1Price);
+        const discount = Math.max(0, (priceNum * qty) - tPrice);
+        setTiers.push({ quantity: qty, price: tPrice, discount });
       }
-      if (tier2Qty && tier2Discount) {
-        setTiers.push({ quantity: parseInt(tier2Qty), discount: parseFloat(tier2Discount) });
+      if (tier2Qty && tier2Price) {
+        const qty = parseInt(tier2Qty);
+        const tPrice = parseFloat(tier2Price);
+        const discount = Math.max(0, (priceNum * qty) - tPrice);
+        setTiers.push({ quantity: qty, price: tPrice, discount });
       }
-      if (tier3Qty && tier3Discount) {
-        setTiers.push({ quantity: parseInt(tier3Qty), discount: parseFloat(tier3Discount) });
+      if (tier3Qty && tier3Price) {
+        const qty = parseInt(tier3Qty);
+        const tPrice = parseFloat(tier3Price);
+        const discount = Math.max(0, (priceNum * qty) - tPrice);
+        setTiers.push({ quantity: qty, price: tPrice, discount });
       }
     }
 
@@ -526,11 +535,11 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                       setSetGroupName('Stickers');
                       setPrice('10.00');
                       setTier1Qty('1');
-                      setTier1Discount('0.00');
+                      setTier1Price('10.00');
                       setTier2Qty('3');
-                      setTier2Discount('5.00');
+                      setTier2Price('25.00');
                       setTier3Qty('5');
-                      setTier3Discount('15.00');
+                      setTier3Price('35.00');
                     }
                   }}
                   className="custom-input"
@@ -600,8 +609,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                       <input type="number" min="1" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier1Qty} onChange={(e) => setTier1Qty(e.target.value)} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 1 Discount (฿)</label>
-                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier1Discount} onChange={(e) => setTier1Discount(e.target.value)} />
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 1 Price (฿)</label>
+                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier1Price} onChange={(e) => setTier1Price(e.target.value)} />
                     </div>
                   </div>
 
@@ -611,8 +620,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                       <input type="number" min="1" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier2Qty} onChange={(e) => setTier2Qty(e.target.value)} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 2 Discount (฿) (Opt)</label>
-                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier2Discount} onChange={(e) => setTier2Discount(e.target.value)} />
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 2 Price (฿) (Opt)</label>
+                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier2Price} onChange={(e) => setTier2Price(e.target.value)} />
                     </div>
                   </div>
 
@@ -622,8 +631,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                       <input type="number" min="1" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier3Qty} onChange={(e) => setTier3Qty(e.target.value)} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 3 Discount (฿) (Opt)</label>
-                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier3Discount} onChange={(e) => setTier3Discount(e.target.value)} />
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 3 Price (฿) (Opt)</label>
+                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier3Price} onChange={(e) => setTier3Price(e.target.value)} />
                     </div>
                   </div>
                 </div>

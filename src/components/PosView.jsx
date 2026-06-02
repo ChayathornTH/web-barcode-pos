@@ -79,12 +79,12 @@ export default function PosView({
   };
 
   const formatTiersInfo = (product) => {
-    if (!product.isSetPriced || !product.setTiers || product.setTiers.length <= 1) return "";
-    const discountTiers = product.setTiers.filter(t => t.quantity > 1);
-    return discountTiers.map(t => {
-      const disc = t.discount !== undefined ? t.discount : Math.max(0, (product.price || 0) * t.quantity - (t.price || 0));
-      const discNum = typeof disc === 'number' ? disc : (parseFloat(disc) || 0);
-      return `${t.quantity} = -฿${discNum.toFixed(0)}`;
+    if (!product.isSetPriced || !product.setTiers || product.setTiers.length === 0) return "";
+    const sortedTiers = [...product.setTiers].sort((a, b) => a.quantity - b.quantity);
+    return sortedTiers.map(t => {
+      const price = t.price !== undefined ? t.price : Math.max(0, (product.price || 0) * t.quantity - (t.discount || 0));
+      const priceNum = typeof price === 'number' ? price : (parseFloat(price) || 0);
+      return `${t.quantity}=฿${priceNum.toFixed(0)}`;
     }).join(', ');
   };
 

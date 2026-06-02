@@ -21,15 +21,22 @@ const normalizeProducts = (items) => {
     if (p.isSetPriced && Array.isArray(p.setTiers)) {
       const basePrice = p.price || 0;
       const normalizedTiers = p.setTiers.map(t => {
-        if (t.discount === undefined && t.price !== undefined) {
-          return {
-            ...t,
-            discount: Math.max(0, basePrice * t.quantity - t.price)
-          };
+        const qty = t.quantity || 1;
+        let tPrice = t.price;
+        let tDiscount = t.discount;
+
+        if (tDiscount === undefined && tPrice !== undefined) {
+          tDiscount = Math.max(0, basePrice * qty - tPrice);
+        } else if (tPrice === undefined && tDiscount !== undefined) {
+          tPrice = Math.max(0, basePrice * qty - tDiscount);
+        } else if (tPrice === undefined && tDiscount === undefined) {
+          tPrice = basePrice * qty;
+          tDiscount = 0;
         }
         return {
           ...t,
-          discount: typeof t.discount === 'number' ? t.discount : (parseFloat(t.discount) || 0)
+          price: typeof tPrice === 'number' ? tPrice : (parseFloat(tPrice) || 0),
+          discount: typeof tDiscount === 'number' ? tDiscount : (parseFloat(tDiscount) || 0)
         };
       });
       return {
@@ -47,15 +54,22 @@ const normalizeCart = (cartItems) => {
     if (item.isSetPriced && Array.isArray(item.setTiers)) {
       const basePrice = item.price || 0;
       const normalizedTiers = item.setTiers.map(t => {
-        if (t.discount === undefined && t.price !== undefined) {
-          return {
-            ...t,
-            discount: Math.max(0, basePrice * t.quantity - t.price)
-          };
+        const qty = t.quantity || 1;
+        let tPrice = t.price;
+        let tDiscount = t.discount;
+
+        if (tDiscount === undefined && tPrice !== undefined) {
+          tDiscount = Math.max(0, basePrice * qty - tPrice);
+        } else if (tPrice === undefined && tDiscount !== undefined) {
+          tPrice = Math.max(0, basePrice * qty - tDiscount);
+        } else if (tPrice === undefined && tDiscount === undefined) {
+          tPrice = basePrice * qty;
+          tDiscount = 0;
         }
         return {
           ...t,
-          discount: typeof t.discount === 'number' ? t.discount : (parseFloat(t.discount) || 0)
+          price: typeof tPrice === 'number' ? tPrice : (parseFloat(tPrice) || 0),
+          discount: typeof tDiscount === 'number' ? tDiscount : (parseFloat(tDiscount) || 0)
         };
       });
       return {
