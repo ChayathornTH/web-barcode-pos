@@ -5,10 +5,14 @@ import InventoryView from './components/InventoryView';
 import DashboardView from './components/DashboardView';
 import { ShoppingCart, Database, LayoutDashboard, Settings, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { 
+  subscribeToProducts,
   subscribeToSalesHistory, 
   addSaleRecord, 
   updateProductStock, 
-  resetSalesHistory as resetSalesFirebase
+  addProductRecord,
+  deleteProductRecord,
+  resetSalesHistory as resetSalesFirebase,
+  resetInventoryCatalog as resetInventoryFirebase
 } from './firebase';
 
 const normalizeProducts = (items) => {
@@ -234,6 +238,23 @@ export default function App() {
       addToast(`Syncing with cloud booth: "${boothId}"`, 'info');
     }, 0);
     
+    // Subscribe to products sub-collection (with auto-seeding if empty on cloud)
+    const unsubscribeProds = subscribeToProducts(boothId, (items) => {
+      if (items.length === 0) {
+        setProducts(prevProducts => {
+          if (prevProducts.length > 0) {
+            addToast("Cloud booth is empty. Syncing and seeding catalog from products.csv...", "info");
+            prevProducts.forEach(p => {
+              addProductRecord(boothId, p);
+            });
+          }
+          return prevProducts;
+        });
+      } else {
+        setProducts(normalizeProducts(items));
+      }
+    });
+
     // Subscribe to sales sub-collection
     const unsubscribeSales = subscribeToSalesHistory(boothId, (history) => {
       setSalesHistory(history);
@@ -241,6 +262,7 @@ export default function App() {
 
     return () => {
       clearTimeout(timer);
+      unsubscribeProds();
       unsubscribeSales();
     };
   }, [boothId]);
@@ -370,10 +392,14 @@ export default function App() {
       }
     }
 
-    const updatedList = [finalProd, ...products];
-    setProducts(updatedList);
-    localStorage.setItem('pos_products', JSON.stringify(updatedList));
-    addToast(`Registered "${finalProd.name}" in inventory catalog locally.`, 'success');
+    if (boothId) {
+      addProductRecord(boothId, finalProd);
+    } else {
+      const updatedList = [finalProd, ...products];
+      setProducts(updatedList);
+      localStorage.setItem('pos_products', JSON.stringify(updatedList));
+    }
+    addToast(`Registered "${finalProd.name}" in inventory catalog.`, 'success');
   };
 
   const handleUpdateProduct = async (updatedProd) => {
@@ -429,24 +455,41 @@ export default function App() {
       }
     }
 
-    // Update local state and offline cache
-    setProducts(updatedList);
-    localStorage.setItem('pos_products', JSON.stringify(updatedList));
-    addToast(`Updated product: ${updatedProd.name} and synced group settings locally.`, 'info');
+    // Update state/sync
+    if (boothId) {
+      for (const p of updatedList) {
+        const current = products.find(curr => curr.id === p.id);
+        if (JSON.stringify(current) !== JSON.stringify(p)) {
+          addProductRecord(boothId, p);
+        }
+      }
+    } else {
+      setProducts(updatedList);
+      localStorage.setItem('pos_products', JSON.stringify(updatedList));
+    }
+    addToast(`Updated product: ${updatedProd.name} and synced group settings.`, 'info');
   };
 
   const handleDeleteProduct = (id) => {
     const prod = products.find(p => p.id === id);
-    const updatedList = products.filter(p => p.id !== id);
-    setProducts(updatedList);
-    localStorage.setItem('pos_products', JSON.stringify(updatedList));
-    addToast(`Deleted "${prod?.name || 'product'}" from local catalog.`, 'warning');
+    if (boothId) {
+      deleteProductRecord(boothId, id);
+    } else {
+      const updatedList = products.filter(p => p.id !== id);
+      setProducts(updatedList);
+      localStorage.setItem('pos_products', JSON.stringify(updatedList));
+    }
+    addToast(`Deleted "${prod?.name || 'product'}" from database.`, 'warning');
   };
 
   const handleResetInventory = () => {
     if (window.confirm("Are you sure you want to restore the default inventory catalog? This will overwrite custom products.")) {
-      setProducts(DEFAULT_PRODUCTS);
-      localStorage.setItem('pos_products', JSON.stringify(DEFAULT_PRODUCTS));
+      if (boothId) {
+        resetInventoryFirebase(boothId);
+      } else {
+        setProducts(DEFAULT_PRODUCTS);
+        localStorage.setItem('pos_products', JSON.stringify(DEFAULT_PRODUCTS));
+      }
       addToast("Restored default product catalog.", "info");
     }
   };
