@@ -78,6 +78,12 @@ export default function PosView({
     }
   };
 
+  const formatTiersInfo = (product) => {
+    if (!product.isSetPriced || !product.setTiers || product.setTiers.length <= 1) return "";
+    const discountTiers = product.setTiers.filter(t => t.quantity > 1);
+    return discountTiers.map(t => `${t.quantity} for ฿${t.price.toFixed(0)}`).join(', ');
+  };
+
   // Handle product click in catalog (Simulates a fast barcode scan)
   const handleProductClick = (product) => {
     if (product.stock === 0) return;
@@ -356,6 +362,27 @@ export default function PosView({
                       <div className="catalog-card-emoji">{product.emoji}</div>
                     )}
                     <div className="catalog-card-name">{product.name}</div>
+                    
+                    {product.isSetPriced && (
+                      <div className="catalog-card-set-tag" style={{
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        color: 'var(--success)',
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.15)',
+                        borderRadius: '4px',
+                        padding: '0.1rem 0.35rem',
+                        marginTop: '0.2rem',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: '100%',
+                        cursor: 'help'
+                      }} title={`${product.setGroupName} Set (${formatTiersInfo(product)})`}>
+                        🏷️ {product.setGroupName} ({formatTiersInfo(product)})
+                      </div>
+                    )}
+
                     <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                       <div className="catalog-card-price">฿{product.price.toFixed(2)}</div>
                       <div className="catalog-card-stock" style={{
