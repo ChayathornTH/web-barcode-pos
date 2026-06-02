@@ -113,18 +113,76 @@ export default function PosView({
     setAppliedDiscount({ code: '', percent: 0 });
   };
 
+  // Generic Optimal Set Pricing Calculation
+  const calculateOptimalGroupPrice = (qty, tiers) => {
+    if (qty <= 0 || !tiers || tiers.length === 0) return 0;
+    const validTiers = tiers.filter(t => t.quantity > 0 && t.price > 0);
+    if (validTiers.length === 0) return 0;
+
+    validTiers.sort((a, b) => a.quantity - b.quantity);
+    const dp = Array(qty + 1).fill(Infinity);
+    dp[0] = 0;
+
+    for (let i = 1; i <= qty; i++) {
+      for (const tier of validTiers) {
+        if (i >= tier.quantity) {
+          dp[i] = Math.min(dp[i], dp[i - tier.quantity] + tier.price);
+        }
+      }
+      if (dp[i] === Infinity) {
+        const smallestTier = validTiers[0];
+        dp[i] = dp[i - 1] + (smallestTier ? smallestTier.price : 0);
+      }
+    }
+    return dp[qty];
+  };
+
+  // Group cart items by set group
+  const setGroups = {};
+  cart.forEach(item => {
+    if (item.isSetPriced) {
+      const groupKey = item.setGroupName ? item.setGroupName.trim() : `single-${item.id}`;
+      if (!setGroups[groupKey]) {
+        setGroups[groupKey] = {
+          items: [],
+          tiers: item.setTiers || []
+        };
+      }
+      setGroups[groupKey].items.push(item);
+    }
+  });
+
+  const setDiscounts = [];
+  Object.keys(setGroups).forEach(groupKey => {
+    const group = setGroups[groupKey];
+    const totalQty = group.items.reduce((sum, i) => sum + i.quantity, 0);
+    const normalPrice = group.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+    const optimalPrice = calculateOptimalGroupPrice(totalQty, group.tiers);
+    const discount = Math.max(0, normalPrice - optimalPrice);
+    if (discount > 0) {
+      setDiscounts.push({
+        groupName: groupKey.startsWith('single-') ? group.items[0].name : `${groupKey} Set`,
+        amount: discount
+      });
+    }
+  });
+
+  const totalSetDiscount = setDiscounts.reduce((sum, d) => sum + d.amount, 0);
+
   // Calculations
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const tax = 0; // VAT removed
   
   let discountAmount = 0;
+  const remainingSubtotal = Math.max(0, subtotal - totalSetDiscount);
+  
   if (appliedDiscount.percent === 'flat-5') {
-    discountAmount = subtotal > 0 ? 5.00 : 0;
+    discountAmount = remainingSubtotal > 0 ? 5.00 : 0;
   } else {
-    discountAmount = subtotal * (appliedDiscount.percent / 100);
+    discountAmount = remainingSubtotal * (appliedDiscount.percent / 100);
   }
   
-  const total = Math.max(0, subtotal + tax - discountAmount);
+  const total = Math.max(0, remainingSubtotal + tax - discountAmount);
 
   // Checkout process simulation
   const handleCheckoutClick = () => {
@@ -136,6 +194,8 @@ export default function PosView({
       items: [...cart],
       subtotal,
       tax,
+      stickerDiscount: totalSetDiscount, // Keep variable name for compatibility in historical lists
+      setDiscounts: setDiscounts, // Store detailed set discounts list
       discount: {
         code: appliedDiscount.code,
         amount: discountAmount
@@ -297,7 +357,7 @@ export default function PosView({
                     )}
                     <div className="catalog-card-name">{product.name}</div>
                     <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                      <div className="catalog-card-price">${product.price.toFixed(2)}</div>
+                      <div className="catalog-card-price">฿{product.price.toFixed(2)}</div>
                       <div className="catalog-card-stock" style={{
                         color: isOutOfStock ? 'var(--danger)' : product.stock < 5 ? 'var(--warning)' : 'var(--text-muted)'
                       }}>
@@ -354,7 +414,7 @@ export default function PosView({
                       <div style={{ minWidth: 0 }}>
                         <div style={styles.itemName}>{item.name}</div>
                         <div style={styles.itemMeta}>
-                          <span>${item.price.toFixed(2)} each</span>
+                          <span>฿{item.price.toFixed(2)} each</span>
                         </div>
                       </div>
                     </div>
@@ -377,7 +437,7 @@ export default function PosView({
                       </div>
 
                       <div className="item-subtotal" style={styles.itemSubtotal}>
-                        ${(item.price * item.quantity).toFixed(2)}
+                        ฿{(item.price * item.quantity).toFixed(2)}
                       </div>
                     </div>
 
@@ -398,14 +458,21 @@ export default function PosView({
               <div style={styles.summaryTable}>
                 <div style={styles.summaryRow}>
                   <span>Subtotal</span>
-                  <span>${subtotal.toFixed(2)}</span>
+                  <span>฿{subtotal.toFixed(2)}</span>
                 </div>
                 {tax > 0 && (
                   <div style={styles.summaryRow}>
                     <span>Tax (7%)</span>
-                    <span>${tax.toFixed(2)}</span>
+                    <span>฿{tax.toFixed(2)}</span>
                   </div>
                 )}
+
+                {setDiscounts.map((disc, idx) => (
+                  <div key={idx} style={{ ...styles.summaryRow, color: 'var(--success)' }}>
+                    <span>{disc.groupName} Discount</span>
+                    <span>-฿{disc.amount.toFixed(2)}</span>
+                  </div>
+                ))}
 
                 {appliedDiscount.code && (
                   <div style={{ ...styles.summaryRow, color: 'var(--success)' }}>
@@ -413,13 +480,13 @@ export default function PosView({
                       <span>Discount</span>
                       <button style={styles.promoTagRemove} onClick={handleRemovePromo}>×</button>
                     </div>
-                    <span>-${discountAmount.toFixed(2)}</span>
+                    <span>-฿{discountAmount.toFixed(2)}</span>
                   </div>
                 )}
 
                 <div style={styles.totalRow}>
                   <span>Total Amount</span>
-                  <span>${total.toFixed(2)}</span>
+                  <span>฿{total.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -504,11 +571,11 @@ export default function PosView({
                     <div style={{ flexGrow: 1 }}>
                       <div>{item.emoji} {item.name}</div>
                       <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        {item.quantity} x ${item.price.toFixed(2)}
+                        {item.quantity} x ฿{item.price.toFixed(2)}
                       </div>
                     </div>
                     <div style={{ fontWeight: 600 }}>
-                      ${(item.price * item.quantity).toFixed(2)}
+                      ฿{(item.price * item.quantity).toFixed(2)}
                     </div>
                   </div>
                 ))}
@@ -519,24 +586,39 @@ export default function PosView({
               <div style={styles.receiptTotals}>
                 <div style={styles.receiptTotalRow}>
                   <span>Subtotal</span>
-                  <span>${receiptData.subtotal.toFixed(2)}</span>
+                  <span>฿{receiptData.subtotal.toFixed(2)}</span>
                 </div>
                 {receiptData.tax > 0 && (
                   <div style={styles.receiptTotalRow}>
                     <span>Tax (7%)</span>
-                    <span>${receiptData.tax.toFixed(2)}</span>
+                    <span>฿{receiptData.tax.toFixed(2)}</span>
                   </div>
+                )}
+                {receiptData.setDiscounts ? (
+                  receiptData.setDiscounts.map((disc, idx) => (
+                    <div key={idx} style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
+                      <span>{disc.groupName} Discount</span>
+                      <span>-฿{disc.amount.toFixed(2)}</span>
+                    </div>
+                  ))
+                ) : (
+                  receiptData.stickerDiscount > 0 && (
+                    <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
+                      <span>Sticker Set Discount</span>
+                      <span>-฿{receiptData.stickerDiscount.toFixed(2)}</span>
+                    </div>
+                  )
                 )}
                 {receiptData.discount.amount > 0 && (
                   <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
                     <span>Discount ({receiptData.discount.code})</span>
-                    <span>-${receiptData.discount.amount.toFixed(2)}</span>
+                    <span>-฿{receiptData.discount.amount.toFixed(2)}</span>
                   </div>
                 )}
                 <div style={{ borderBottom: '1px solid #000', margin: '0.4rem 0' }}></div>
                 <div style={{ ...styles.receiptTotalRow, fontSize: '1.2rem', fontWeight: 800 }}>
                   <span>Grand Total</span>
-                  <span>${receiptData.total.toFixed(2)}</span>
+                  <span>฿{receiptData.total.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -581,7 +663,7 @@ export default function PosView({
             }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.25rem' }}>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Price ($) *</label>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Price (฿) *</label>
                 <input 
                   type="number"
                   step="0.01"

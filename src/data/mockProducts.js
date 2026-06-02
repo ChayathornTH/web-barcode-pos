@@ -107,10 +107,17 @@ export const DEFAULT_PRODUCTS = [
     id: "art-11",
     barcode: "2011",
     name: "Individual Die-Cut Sticker",
-    price: 3.00,
+    price: 10.00,
     category: "Stickers",
     stock: 120,
     emoji: "💖",
+    isSetPriced: true,
+    setGroupName: "Stickers",
+    setTiers: [
+      { quantity: 1, price: 10.00 },
+      { quantity: 3, price: 25.00 },
+      { quantity: 5, price: 35.00 }
+    ],
     description: "Matte vinyl sticker of various cute characters."
   },
   {

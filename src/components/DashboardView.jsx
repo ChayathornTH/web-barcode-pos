@@ -74,16 +74,17 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       "Product Name", 
       "Category", 
       "Quantity", 
-      "Unit Price ($)", 
-      "Line Subtotal ($)", 
+      "Unit Price (฿)", 
+      "Line Subtotal (฿)", 
+      "Sticker Discount (฿)",
       "Coupon Code", 
-      "Discount Applied ($)", 
-      "Invoice Grand Total ($)"
+      "Coupon Discount (฿)", 
+      "Invoice Grand Total (฿)"
     ];
     
     const rows = [];
     salesHistory.forEach(sale => {
-      sale.items.forEach(item => {
+      sale.items.forEach((item, index) => {
         rows.push([
           sale.id,
           sale.timestamp,
@@ -92,9 +93,10 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
           item.quantity,
           item.price.toFixed(2),
           (item.price * item.quantity).toFixed(2),
+          index === 0 ? (sale.stickerDiscount || 0).toFixed(2) : "0.00",
           sale.discount.code || "None",
-          sale.discount.amount.toFixed(2),
-          sale.total.toFixed(2)
+          index === 0 ? (sale.discount.amount || 0).toFixed(2) : "0.00",
+          index === 0 ? sale.total.toFixed(2) : ""
         ]);
       });
     });
@@ -150,7 +152,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
             </div>
             <span style={styles.statLabel}>Total Revenue</span>
           </div>
-          <div style={styles.statValue}>${totalRevenue.toFixed(2)}</div>
+          <div style={styles.statValue}>฿{totalRevenue.toFixed(2)}</div>
           <div style={styles.statTrend}>
             <TrendingUp size={14} color="var(--success)" />
             <span style={{ color: 'var(--success)', fontWeight: 600 }}>+12.4%</span> vs yesterday
@@ -191,7 +193,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
             </div>
             <span style={styles.statLabel}>Avg Ticket</span>
           </div>
-          <div style={styles.statValue}>${averageTicket.toFixed(2)}</div>
+          <div style={styles.statValue}>฿{averageTicket.toFixed(2)}</div>
           <div style={styles.statTrend}>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Total basket value avg</span>
           </div>
@@ -204,7 +206,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
         
         {/* Hourly sales distribution (Custom SVG) */}
         <div className="glass-panel" style={styles.chartCard}>
-          <h3 style={styles.cardTitle}>Hourly Sales ($)</h3>
+          <h3 style={styles.cardTitle}>Hourly Sales (฿)</h3>
           
           <div style={styles.svgContainer}>
             <svg width="100%" height="220" style={{ overflow: 'visible' }}>
@@ -214,7 +216,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                 return (
                   <g key={index}>
                     <line x1="40" y1={y} x2="100%" y2={y} stroke="var(--border-color)" strokeDasharray="4 4" />
-                    <text x="32" y={y + 4} fill="var(--text-muted)" fontSize="9" textAnchor="end">${value}</text>
+                    <text x="32" y={y + 4} fill="var(--text-muted)" fontSize="9" textAnchor="end">฿{value}</text>
                   </g>
                 );
               })}
@@ -247,7 +249,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                         fontWeight="700"
                         textAnchor="middle"
                       >
-                        ${Math.round(bucket.amount)}
+                        ฿{Math.round(bucket.amount)}
                       </text>
                     )}
 
@@ -289,7 +291,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                   <div style={styles.categoryMeta}>
                     <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{cat.category}</span>
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                      ${cat.amount.toFixed(2)} ({Math.round(cat.percent)}%)
+                      ฿{cat.amount.toFixed(2)} ({Math.round(cat.percent)}%)
                     </span>
                   </div>
                   <div style={styles.barTrack}>
@@ -333,20 +335,21 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
               <tbody>
                 {salesHistory.map((sale) => {
                   const qty = sale.items.reduce((s, i) => s + i.quantity, 0);
+                  const totalDiscount = (sale.discount?.amount || 0) + (sale.stickerDiscount || 0);
                   return (
                     <tr key={sale.id} style={styles.tr}>
                       <td style={{ ...styles.td, fontWeight: 700 }}>{sale.id}</td>
                       <td style={styles.td}>{sale.timestamp}</td>
                       <td style={styles.td}>{qty} items</td>
                       <td style={styles.td}>
-                        {sale.discount.amount > 0 ? (
-                          <span style={styles.discountBadge}>-${sale.discount.amount.toFixed(2)}</span>
+                        {totalDiscount > 0 ? (
+                          <span style={styles.discountBadge}>-฿{totalDiscount.toFixed(2)}</span>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>None</span>
                         )}
                       </td>
                       <td style={{ ...styles.td, fontWeight: 800, color: 'var(--success)' }}>
-                        ${sale.total.toFixed(2)}
+                        ฿{sale.total.toFixed(2)}
                       </td>
                       <td style={{ ...styles.td, textAlign: 'right' }}>
                         <button 
@@ -394,11 +397,11 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                     <div style={{ flexGrow: 1 }}>
                       <div>{item.emoji} {item.name}</div>
                       <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        {item.quantity} x ${item.price.toFixed(2)}
+                        {item.quantity} x ฿{item.price.toFixed(2)}
                       </div>
                     </div>
                     <div style={{ fontWeight: 600 }}>
-                      ${(item.price * item.quantity).toFixed(2)}
+                      ฿{(item.price * item.quantity).toFixed(2)}
                     </div>
                   </div>
                 ))}
@@ -409,24 +412,39 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
               <div style={styles.receiptTotals}>
                 <div style={styles.receiptTotalRow}>
                   <span>Subtotal</span>
-                  <span>${selectedReceipt.subtotal.toFixed(2)}</span>
+                  <span>฿{selectedReceipt.subtotal.toFixed(2)}</span>
                 </div>
                 {selectedReceipt.tax > 0 && (
                   <div style={styles.receiptTotalRow}>
                     <span>Tax (7%)</span>
-                    <span>${selectedReceipt.tax.toFixed(2)}</span>
+                    <span>฿{selectedReceipt.tax.toFixed(2)}</span>
                   </div>
+                )}
+                {selectedReceipt.setDiscounts ? (
+                  selectedReceipt.setDiscounts.map((disc, idx) => (
+                    <div key={idx} style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
+                      <span>{disc.groupName} Discount</span>
+                      <span>-฿{disc.amount.toFixed(2)}</span>
+                    </div>
+                  ))
+                ) : (
+                  selectedReceipt.stickerDiscount > 0 && (
+                    <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
+                      <span>Sticker Set Discount</span>
+                      <span>-฿{selectedReceipt.stickerDiscount.toFixed(2)}</span>
+                    </div>
+                  )
                 )}
                 {selectedReceipt.discount.amount > 0 && (
                   <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
                     <span>Discount ({selectedReceipt.discount.code})</span>
-                    <span>-${selectedReceipt.discount.amount.toFixed(2)}</span>
+                    <span>-฿{selectedReceipt.discount.amount.toFixed(2)}</span>
                   </div>
                 )}
                 <div style={{ borderBottom: '1px solid #000', margin: '0.4rem 0' }}></div>
                 <div style={{ ...styles.receiptTotalRow, fontSize: '1.2rem', fontWeight: 800 }}>
                   <span>Grand Total</span>
-                  <span>${selectedReceipt.total.toFixed(2)}</span>
+                  <span>฿{selectedReceipt.total.toFixed(2)}</span>
                 </div>
               </div>
 

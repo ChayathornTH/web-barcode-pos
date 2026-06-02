@@ -3,13 +3,10 @@ import { Plus, Search, Trash2, Edit3, X, Barcode as BarcodeIcon, RotateCcw, Aler
 
 
 const CATEGORIES = [
-  "Fresh Produce",
-  "Dairy",
-  "Bakery",
-  "Beverages",
-  "Snacks",
-  "Packaged Food",
-  "Personal Care",
+  "Paintings",
+  "Prints",
+  "Stickers",
+  "Accessories",
   "Stationery",
   "Other"
 ];
@@ -17,27 +14,23 @@ const CATEGORIES = [
 // Helper to match emojis based on product characteristics
 const getEmojiForProduct = (name, category) => {
   const n = name.toLowerCase();
-  if (n.includes('milk') || n.includes('cheese') || n.includes('butter')) return '🥛';
-  if (n.includes('bread') || n.includes('croissant') || n.includes('bun')) return '🍞';
-  if (n.includes('coke') || n.includes('cola') || n.includes('soda') || n.includes('water') || n.includes('drink') || n.includes('juice')) return '🥤';
-  if (n.includes('noodle') || n.includes('pasta') || n.includes('soup')) return '🍜';
-  if (n.includes('chip') || n.includes('snack') || n.includes('cookie') || n.includes('chocolate') || n.includes('candy')) return '🍫';
-  if (n.includes('apple') || n.includes('banana') || n.includes('fruit') || n.includes('salad') || n.includes('orange') || n.includes('berry') || n.includes('avocado')) return '🍎';
-  if (n.includes('paper') || n.includes('pen') || n.includes('pencil') || n.includes('book')) return '📄';
-  if (n.includes('paste') || n.includes('brush') || n.includes('shampoo') || n.includes('soap')) return '🪥';
-  if (n.includes('razor') || n.includes('blade')) return '🪒';
-  if (n.includes('coffee') || n.includes('tea')) return '☕';
+  if (n.includes('canvas') || n.includes('acrylic') || n.includes('oil') || n.includes('paint')) return '🎨';
+  if (n.includes('watercolor') || n.includes('landscape') || n.includes('gouache')) return '🌸';
+  if (n.includes('sticker')) return '✨';
+  if (n.includes('print')) return '🖼️';
+  if (n.includes('keychain') || n.includes('charm')) return '🔑';
+  if (n.includes('pin') || n.includes('badge')) return '📌';
+  if (n.includes('postcard') || n.includes('card')) return '✉️';
+  if (n.includes('book') || n.includes('sketchbook') || n.includes('notebook')) return '📓';
+  if (n.includes('tape') || n.includes('washi')) return '🎞️';
 
   // Fallbacks by category
   switch (category) {
-    case "Fresh Produce": return '🥗';
-    case "Dairy": return '🧀';
-    case "Bakery": return '🥯';
-    case "Beverages": return '🥤';
-    case "Snacks": return '🍿';
-    case "Packaged Food": return '🥫';
-    case "Personal Care": return '🧼';
-    case "Stationery": return '✏️';
+    case "Paintings": return '🎨';
+    case "Prints": return '🖼️';
+    case "Stickers": return '✨';
+    case "Accessories": return '🔑';
+    case "Stationery": return '📓';
     default: return '📦';
   }
 };
@@ -56,6 +49,14 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   const [stock, setStock] = useState('');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
+  const [isSetPriced, setIsSetPriced] = useState(false);
+  const [setGroupName, setSetGroupName] = useState('');
+  const [tier1Qty, setTier1Qty] = useState('1');
+  const [tier1Price, setTier1Price] = useState('');
+  const [tier2Qty, setTier2Qty] = useState('');
+  const [tier2Price, setTier2Price] = useState('');
+  const [tier3Qty, setTier3Qty] = useState('');
+  const [tier3Price, setTier3Price] = useState('');
   const [formError, setFormError] = useState('');
 
   // Handle Edit click
@@ -68,6 +69,15 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setStock(product.stock.toString());
     setDescription(product.description || '');
     setImage(product.image || '');
+    setIsSetPriced(!!product.isSetPriced);
+    setSetGroupName(product.setGroupName || '');
+    const tiers = product.setTiers || [];
+    setTier1Qty(tiers[0]?.quantity?.toString() || '1');
+    setTier1Price(tiers[0]?.price?.toString() || '');
+    setTier2Qty(tiers[1]?.quantity?.toString() || '');
+    setTier2Price(tiers[1]?.price?.toString() || '');
+    setTier3Qty(tiers[2]?.quantity?.toString() || '');
+    setTier3Price(tiers[2]?.price?.toString() || '');
     setIsModalOpen(true);
   };
 
@@ -81,6 +91,14 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setStock('');
     setDescription('');
     setImage('');
+    setIsSetPriced(false);
+    setSetGroupName('');
+    setTier1Qty('1');
+    setTier1Price('');
+    setTier2Qty('');
+    setTier2Price('');
+    setTier3Qty('');
+    setTier3Price('');
     setFormError('');
     setIsModalOpen(true);
   };
@@ -144,6 +162,20 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
 
     const emoji = getEmojiForProduct(name, category);
 
+    // Construct set pricing tiers if enabled
+    const setTiers = [];
+    if (isSetPriced) {
+      if (tier1Qty && tier1Price) {
+        setTiers.push({ quantity: parseInt(tier1Qty), price: parseFloat(tier1Price) });
+      }
+      if (tier2Qty && tier2Price) {
+        setTiers.push({ quantity: parseInt(tier2Qty), price: parseFloat(tier2Price) });
+      }
+      if (tier3Qty && tier3Price) {
+        setTiers.push({ quantity: parseInt(tier3Qty), price: parseFloat(tier3Price) });
+      }
+    }
+
     if (editingProduct) {
       // Update
       onUpdateProduct({
@@ -155,7 +187,10 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         stock: stockNum,
         description,
         emoji,
-        image
+        image,
+        isSetPriced,
+        setGroupName: setGroupName.trim(),
+        setTiers
       });
     } else {
       // Add
@@ -168,7 +203,10 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         stock: stockNum,
         description,
         emoji,
-        image
+        image,
+        isSetPriced,
+        setGroupName: setGroupName.trim(),
+        setTiers
       });
     }
 
@@ -256,6 +294,19 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.15rem' }}>
                     <span style={styles.categoryBadge}>{product.category}</span>
                     <span style={styles.barcodeBadge}>#{product.barcode}</span>
+                    {product.isSetPriced && (
+                      <span style={{
+                        padding: '0.15rem 0.4rem',
+                        borderRadius: '4px',
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        color: 'var(--success)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)'
+                      }}>🏷️ {product.setGroupName || "Set"} Tier</span>
+                    )}
                   </div>
                   <h4 style={styles.productName}>{product.name}</h4>
                 </div>
@@ -266,7 +317,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
               <div style={styles.priceStockRow}>
                 <div>
                   <div style={styles.label}>PRICE</div>
-                  <div style={styles.priceVal}>${product.price.toFixed(2)}</div>
+                  <div style={styles.priceVal}>฿{product.price.toFixed(2)}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={styles.label}>STOCK</div>
@@ -375,7 +426,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
 
               <div style={styles.formRow}>
                 <div style={{ ...styles.formGroup, flex: 1 }}>
-                  <label style={styles.formLabel}>Price ($) *</label>
+                  <label style={styles.formLabel}>Price (฿) *</label>
                   <input 
                     type="number" 
                     step="0.01"
@@ -405,7 +456,21 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                 <label style={styles.formLabel}>Category</label>
                 <select 
                   value={category} 
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    const newCat = e.target.value;
+                    setCategory(newCat);
+                    if (newCat === 'Stickers') {
+                      setIsSetPriced(true);
+                      setSetGroupName('Stickers');
+                      setPrice('10.00');
+                      setTier1Qty('1');
+                      setTier1Price('10.00');
+                      setTier2Qty('3');
+                      setTier2Price('25.00');
+                      setTier3Qty('5');
+                      setTier3Price('35.00');
+                    }
+                  }}
                   className="custom-input"
                   style={{ width: '100%' }}
                 >
@@ -414,6 +479,77 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                   ))}
                 </select>
               </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', padding: '0.5rem', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                <input 
+                  type="checkbox" 
+                  id="isSetPriced" 
+                  checked={isSetPriced}
+                  onChange={(e) => setIsSetPriced(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="isSetPriced" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', cursor: 'pointer', userSelect: 'none' }}>
+                  Enable Set / Volume Tier Pricing
+                </label>
+              </div>
+
+              {isSetPriced && (
+                <div style={{
+                  marginBottom: '1.25rem',
+                  padding: '1rem',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid var(--border-color)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem'
+                }}>
+                  <div style={styles.formGroup}>
+                    <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Set Group Name (Items in same group bundle together)</label>
+                    <input 
+                      type="text" 
+                      placeholder="E.g., Stickers, Pins" 
+                      className="custom-input"
+                      style={{ fontSize: '0.85rem' }}
+                      value={setGroupName}
+                      onChange={(e) => setSetGroupName(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 1 Qty</label>
+                      <input type="number" min="1" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier1Qty} onChange={(e) => setTier1Qty(e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 1 Price (฿)</label>
+                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier1Price} onChange={(e) => setTier1Price(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 2 Qty (Opt)</label>
+                      <input type="number" min="1" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier2Qty} onChange={(e) => setTier2Qty(e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 2 Price (฿) (Opt)</label>
+                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier2Price} onChange={(e) => setTier2Price(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 3 Qty (Opt)</label>
+                      <input type="number" min="1" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier3Qty} onChange={(e) => setTier3Qty(e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Tier 3 Price (฿) (Opt)</label>
+                      <input type="number" step="0.01" className="custom-input" style={{ fontSize: '0.85rem' }} value={tier3Price} onChange={(e) => setTier3Price(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Product Image</label>

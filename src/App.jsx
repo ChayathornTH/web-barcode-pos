@@ -268,11 +268,18 @@ export default function App() {
       category: category,
       stock: 999,
       emoji: "🎨",
-      description: "Custom commissioned art item."
+      description: "Custom commissioned art item.",
+      isSetPriced: category === 'Stickers',
+      setGroupName: category === 'Stickers' ? 'Stickers' : '',
+      setTiers: category === 'Stickers' ? [
+        { quantity: 1, price: 10.00 },
+        { quantity: 3, price: 25.00 },
+        { quantity: 5, price: 35.00 }
+      ] : []
     };
 
     setCart((prev) => [...prev, { ...customProduct, quantity: 1 }]);
-    addToast(`Added custom "${customProduct.name}" ($${priceNum.toFixed(2)}) to cart.`, 'success');
+    addToast(`Added custom "${customProduct.name}" (฿${priceNum.toFixed(2)}) to cart.`, 'success');
   };
 
   // Cart Management Actions
