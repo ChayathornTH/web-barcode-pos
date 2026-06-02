@@ -290,13 +290,70 @@ export default function App() {
     addToast(`Registered "${newProd.name}" in inventory catalog.`, 'success');
   };
 
-  const handleUpdateProduct = (updatedProd) => {
-    if (boothId) {
-      addProductRecord(boothId, updatedProd);
-    } else {
-      setProducts((prev) => prev.map(p => p.id === updatedProd.id ? updatedProd : p));
+  const handleUpdateProduct = async (updatedProd) => {
+    const originalProd = products.find(p => p.id === updatedProd.id);
+    const originalGroupName = originalProd?.setGroupName || '';
+    const newGroupName = updatedProd.setGroupName || '';
+    const isGroupNameChanged = originalProd && originalProd.isSetPriced && updatedProd.isSetPriced && originalGroupName !== newGroupName;
+
+    const syncTiersForProduct = (targetProd, referenceTiers) => {
+      const basePrice = targetProd.price || 0;
+      return referenceTiers.map(t => {
+        const qty = t.quantity || 1;
+        const tPrice = t.price !== undefined ? t.price : Math.max(0, basePrice * qty - (t.discount || 0));
+        const discount = Math.max(0, basePrice * qty - tPrice);
+        return {
+          quantity: qty,
+          price: tPrice,
+          discount: discount
+        };
+      });
+    };
+
+    let updatedList = products.map(p => p.id === updatedProd.id ? updatedProd : p);
+
+    if (updatedProd.isSetPriced && newGroupName) {
+      // Check if we are renaming an existing group
+      const otherGroupNames = products.filter(p => p.id !== updatedProd.id && p.isSetPriced).map(p => p.setGroupName);
+      const isNewGroupBrandNew = !otherGroupNames.includes(newGroupName);
+
+      if (isGroupNameChanged && isNewGroupBrandNew && originalGroupName) {
+        // Renaming group: update all products in original group to the new group name and new tiers
+        updatedList = updatedList.map(p => {
+          if (p.isSetPriced && p.setGroupName === originalGroupName) {
+            return {
+              ...p,
+              setGroupName: newGroupName,
+              setTiers: syncTiersForProduct(p, updatedProd.setTiers)
+            };
+          }
+          return p;
+        });
+      } else {
+        // Same group or joining an existing group: synchronize tiers for all items in the new group
+        updatedList = updatedList.map(p => {
+          if (p.isSetPriced && p.setGroupName === newGroupName && p.id !== updatedProd.id) {
+            return {
+              ...p,
+              setTiers: syncTiersForProduct(p, updatedProd.setTiers)
+            };
+          }
+          return p;
+        });
+      }
     }
-    addToast(`Updated product: ${updatedProd.name}`, 'info');
+
+    if (boothId) {
+      for (const p of updatedList) {
+        const current = products.find(curr => curr.id === p.id);
+        if (JSON.stringify(current) !== JSON.stringify(p)) {
+          await addProductRecord(boothId, p);
+        }
+      }
+    } else {
+      setProducts(updatedList);
+    }
+    addToast(`Updated product: ${updatedProd.name} and synced group settings.`, 'info');
   };
 
   const handleDeleteProduct = (id) => {

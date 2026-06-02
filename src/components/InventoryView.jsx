@@ -282,13 +282,31 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setIsModalOpen(false);
   };
 
-  // Filter products
+  // Filter products and sort so items in the same group are next to each other
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           p.barcode.includes(searchTerm) || 
                           p.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
+  }).sort((a, b) => {
+    const aGroup = (a.isSetPriced && a.setGroupName) ? a.setGroupName.trim().toLowerCase() : '';
+    const bGroup = (b.isSetPriced && b.setGroupName) ? b.setGroupName.trim().toLowerCase() : '';
+    
+    if (aGroup && bGroup) {
+      if (aGroup !== bGroup) {
+        return aGroup.localeCompare(bGroup);
+      }
+      return a.name.localeCompare(b.name);
+    }
+    if (aGroup) return -1;
+    if (bGroup) return 1;
+    
+    // Sort ungrouped items by category then name
+    if (a.category !== b.category) {
+      return a.category.localeCompare(b.category);
+    }
+    return a.name.localeCompare(b.name);
   });
 
   return (

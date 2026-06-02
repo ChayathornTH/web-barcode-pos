@@ -232,13 +232,31 @@ export default function PosView({
     setReceiptData(null);
   };
 
-  // Filter Catalog Products
+  // Filter and sort catalog products so items in the same group are next to each other
   const filteredCatalogProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || 
                           p.description?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
                           p.barcode.includes(catalogSearch);
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
+  }).sort((a, b) => {
+    const aGroup = (a.isSetPriced && a.setGroupName) ? a.setGroupName.trim().toLowerCase() : '';
+    const bGroup = (b.isSetPriced && b.setGroupName) ? b.setGroupName.trim().toLowerCase() : '';
+    
+    if (aGroup && bGroup) {
+      if (aGroup !== bGroup) {
+        return aGroup.localeCompare(bGroup);
+      }
+      return a.name.localeCompare(b.name);
+    }
+    if (aGroup) return -1;
+    if (bGroup) return 1;
+    
+    // Sort ungrouped items by category then name
+    if (a.category !== b.category) {
+      return a.category.localeCompare(b.category);
+    }
+    return a.name.localeCompare(b.name);
   });
 
   return (
