@@ -193,18 +193,39 @@ export default function App() {
   useEffect(() => {
     const loadProductsFromCSV = async () => {
       try {
+        const githubUrl = "https://raw.githubusercontent.com/ChayathornTH/web-barcode-pos/main/public/products.csv";
         const basePath = import.meta.env.BASE_URL || '/';
-        const url = `${basePath}products.csv`.replace(/\/+/g, '/');
-        const response = await fetch(url);
+        const localUrl = `${basePath}products.csv`.replace(/\/+/g, '/');
+        
+        let response;
+        let loadedFromGithub = false;
+        
+        // Try fetching from GitHub raw content first for real-time changes
+        try {
+          response = await fetch(githubUrl, { cache: 'no-store' });
+          if (response.ok) {
+            loadedFromGithub = true;
+          } else {
+            throw new Error("GitHub raw fetch failed");
+          }
+        } catch (githubErr) {
+          console.warn("Could not fetch from GitHub raw repository, falling back to local file:", githubErr);
+          response = await fetch(localUrl);
+        }
+
         if (!response.ok) {
           throw new Error(`Failed to load products.csv: ${response.statusText}`);
         }
+        
         const csvText = await response.text();
         const parsed = parseCSVProducts(csvText);
         if (parsed && parsed.length > 0) {
           setProducts(parsed);
           localStorage.setItem('pos_products', JSON.stringify(parsed));
-          addToast(`Loaded ${parsed.length} products from products.csv`, 'success');
+          addToast(
+            `Loaded ${parsed.length} products ${loadedFromGithub ? 'from GitHub (latest)' : 'from local backup'}`, 
+            'success'
+          );
         }
       } catch (error) {
         console.error("Failed to load products from CSV, using cached catalog:", error);
@@ -238,19 +259,27 @@ export default function App() {
       addToast(`Syncing with cloud booth: "${boothId}"`, 'info');
     }, 0);
     
+    let hasCheckedInitial = false;
+    
     // Subscribe to products sub-collection (with auto-seeding if empty on cloud)
     const unsubscribeProds = subscribeToProducts(boothId, (items) => {
       if (items.length === 0) {
-        setProducts(prevProducts => {
-          if (prevProducts.length > 0) {
-            addToast("Cloud booth is empty. Syncing and seeding catalog from products.csv...", "info");
-            prevProducts.forEach(p => {
-              addProductRecord(boothId, p);
-            });
-          }
-          return prevProducts;
-        });
+        if (!hasCheckedInitial) {
+          hasCheckedInitial = true;
+          setProducts(prevProducts => {
+            if (prevProducts.length > 0) {
+              addToast("Cloud booth is empty. Syncing and seeding catalog from products.csv...", "info");
+              prevProducts.forEach(p => {
+                addProductRecord(boothId, p);
+              });
+            }
+            return prevProducts;
+          });
+        } else {
+          setProducts([]);
+        }
       } else {
+        hasCheckedInitial = true;
         setProducts(normalizeProducts(items));
       }
     });
@@ -482,15 +511,59 @@ export default function App() {
     addToast(`Deleted "${prod?.name || 'product'}" from database.`, 'warning');
   };
 
-  const handleResetInventory = () => {
-    if (window.confirm("Are you sure you want to restore the default inventory catalog? This will overwrite custom products.")) {
-      if (boothId) {
-        resetInventoryFirebase(boothId);
-      } else {
-        setProducts(DEFAULT_PRODUCTS);
-        localStorage.setItem('pos_products', JSON.stringify(DEFAULT_PRODUCTS));
+  const handleResetInventory = async () => {
+    if (window.confirm("Are you sure you want to restore the inventory catalog from products.csv? This will overwrite custom products and reset all changes.")) {
+      try {
+        const githubUrl = "https://raw.githubusercontent.com/ChayathornTH/web-barcode-pos/main/public/products.csv";
+        const basePath = import.meta.env.BASE_URL || '/';
+        const localUrl = `${basePath}products.csv`.replace(/\/+/g, '/');
+        
+        let response;
+        try {
+          response = await fetch(githubUrl, { cache: 'no-store' });
+          if (!response.ok) throw new Error();
+        } catch {
+          response = await fetch(localUrl);
+        }
+        
+        if (!response.ok) {
+          throw new Error("Failed to fetch CSV for reset");
+        }
+        
+        const csvText = await response.text();
+        const csvProducts = parseCSVProducts(csvText);
+        
+        if (csvProducts && csvProducts.length > 0) {
+          if (boothId) {
+            // First clear products in Firebase
+            await resetInventoryFirebase(boothId);
+            // Then seed with csvProducts
+            for (const p of csvProducts) {
+              await addProductRecord(boothId, p);
+            }
+          } else {
+            setProducts(csvProducts);
+            localStorage.setItem('pos_products', JSON.stringify(csvProducts));
+          }
+          addToast("Successfully reset inventory from products.csv", "success");
+        } else {
+          throw new Error("Parsed CSV is empty");
+        }
+      } catch (error) {
+        console.error("Error resetting inventory:", error);
+        addToast("Failed to reset inventory from CSV. Using default catalog instead.", "error");
+        
+        // Fallback to hardcoded mock products if CSV parse/fetch fails completely
+        if (boothId) {
+          await resetInventoryFirebase(boothId);
+          for (const p of DEFAULT_PRODUCTS) {
+            await addProductRecord(boothId, p);
+          }
+        } else {
+          setProducts(DEFAULT_PRODUCTS);
+          localStorage.setItem('pos_products', JSON.stringify(DEFAULT_PRODUCTS));
+        }
       }
-      addToast("Restored default product catalog.", "info");
     }
   };
 

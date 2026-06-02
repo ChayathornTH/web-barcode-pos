@@ -12,8 +12,6 @@ import {
   orderBy,
   writeBatch
 } from "firebase/firestore";
-import { DEFAULT_PRODUCTS } from "./data/mockProducts";
-
 // User's Firebase configuration read from environment variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -29,33 +27,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-/**
- * Seeding helper to populate default products under a booth if empty
- */
-const seedDefaultProducts = async (boothId) => {
-  const productsRef = collection(db, "booths", boothId, "products");
-  const batch = writeBatch(db);
-
-  DEFAULT_PRODUCTS.forEach((prod) => {
-    // Use product ID as document ID for clean mapping
-    const docRef = doc(productsRef, prod.id);
-    batch.set(docRef, prod);
-  });
-
-  await batch.commit();
-  console.log(`Successfully seeded default catalog for booth: ${boothId}`);
-};
-
-/**
- * Subscribe to Products real-time updates
- */
 export const subscribeToProducts = (boothId, onUpdate) => {
   const productsRef = collection(db, "booths", boothId, "products");
   
-  return onSnapshot(productsRef, async (snapshot) => {
+  return onSnapshot(productsRef, (snapshot) => {
     if (snapshot.empty) {
-      // If collection is empty, automatically seed with default art items
-      await seedDefaultProducts(boothId);
+      onUpdate([]);
     } else {
       const items = snapshot.docs.map(doc => ({
         id: doc.id,
