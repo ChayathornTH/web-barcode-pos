@@ -81,7 +81,7 @@ export default function PosView({
   const formatTiersInfo = (product) => {
     if (!product.isSetPriced || !product.setTiers || product.setTiers.length <= 1) return "";
     const discountTiers = product.setTiers.filter(t => t.quantity > 1);
-    return discountTiers.map(t => `${t.quantity} for ฿${t.price.toFixed(0)}`).join(', ');
+    return discountTiers.map(t => `${t.quantity} = -฿${t.discount.toFixed(0)}`).join(', ');
   };
 
   // Handle product click in catalog (Simulates a fast barcode scan)
@@ -119,26 +119,23 @@ export default function PosView({
     setAppliedDiscount({ code: '', percent: 0 });
   };
 
-  // Generic Optimal Set Pricing Calculation
-  const calculateOptimalGroupPrice = (qty, tiers) => {
+  // Generic Optimal Set Discount Calculation
+  const calculateOptimalGroupDiscount = (qty, tiers) => {
     if (qty <= 0 || !tiers || tiers.length === 0) return 0;
-    const validTiers = tiers.filter(t => t.quantity > 0 && t.price > 0);
+    const validTiers = tiers.filter(t => t.quantity > 0 && t.discount >= 0);
     if (validTiers.length === 0) return 0;
 
     validTiers.sort((a, b) => a.quantity - b.quantity);
-    const dp = Array(qty + 1).fill(Infinity);
-    dp[0] = 0;
+    const dp = Array(qty + 1).fill(0);
 
     for (let i = 1; i <= qty; i++) {
+      let maxDisc = dp[i - 1];
       for (const tier of validTiers) {
         if (i >= tier.quantity) {
-          dp[i] = Math.min(dp[i], dp[i - tier.quantity] + tier.price);
+          maxDisc = Math.max(maxDisc, dp[i - tier.quantity] + tier.discount);
         }
       }
-      if (dp[i] === Infinity) {
-        const smallestTier = validTiers[0];
-        dp[i] = dp[i - 1] + (smallestTier ? smallestTier.price : 0);
-      }
+      dp[i] = maxDisc;
     }
     return dp[qty];
   };
@@ -162,9 +159,7 @@ export default function PosView({
   Object.keys(setGroups).forEach(groupKey => {
     const group = setGroups[groupKey];
     const totalQty = group.items.reduce((sum, i) => sum + i.quantity, 0);
-    const normalPrice = group.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-    const optimalPrice = calculateOptimalGroupPrice(totalQty, group.tiers);
-    const discount = Math.max(0, normalPrice - optimalPrice);
+    const discount = calculateOptimalGroupDiscount(totalQty, group.tiers);
     if (discount > 0) {
       setDiscounts.push({
         groupName: groupKey.startsWith('single-') ? group.items[0].name : `${groupKey} Set`,

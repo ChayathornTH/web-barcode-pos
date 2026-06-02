@@ -114,9 +114,9 @@ export const DEFAULT_PRODUCTS = [
     isSetPriced: true,
     setGroupName: "Stickers",
     setTiers: [
-      { quantity: 1, price: 10.00 },
-      { quantity: 3, price: 25.00 },
-      { quantity: 5, price: 35.00 }
+      { quantity: 1, discount: 0.00 },
+      { quantity: 3, discount: 5.00 },
+      { quantity: 5, discount: 15.00 }
     ],
     description: "Matte vinyl sticker of various cute characters."
   },

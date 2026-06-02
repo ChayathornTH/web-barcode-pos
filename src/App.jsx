@@ -272,9 +272,9 @@ export default function App() {
       isSetPriced: category === 'Stickers',
       setGroupName: category === 'Stickers' ? 'Stickers' : '',
       setTiers: category === 'Stickers' ? [
-        { quantity: 1, price: 10.00 },
-        { quantity: 3, price: 25.00 },
-        { quantity: 5, price: 35.00 }
+        { quantity: 1, discount: 0.00 },
+        { quantity: 3, discount: 5.00 },
+        { quantity: 5, discount: 15.00 }
       ] : []
     };
 
