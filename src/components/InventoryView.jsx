@@ -41,6 +41,18 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
 
+  // Get all unique existing set groups and their tiers from the product list
+  const availableGroups = {};
+  products.forEach(p => {
+    if (p.isSetPriced && p.setGroupName) {
+      const nameKey = p.setGroupName.trim();
+      if (!availableGroups[nameKey]) {
+        availableGroups[nameKey] = p.setTiers || [];
+      }
+    }
+  });
+  const groupNames = Object.keys(availableGroups);
+
   // Form State
   const [barcode, setBarcode] = useState('');
   const [name, setName] = useState('');
@@ -51,6 +63,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   const [image, setImage] = useState('');
   const [isSetPriced, setIsSetPriced] = useState(false);
   const [setGroupName, setSetGroupName] = useState('');
+  const [groupSelectValue, setGroupSelectValue] = useState('');
   const [tier1Qty, setTier1Qty] = useState('1');
   const [tier1Price, setTier1Price] = useState('');
   const [tier2Qty, setTier2Qty] = useState('');
@@ -70,7 +83,15 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setDescription(product.description || '');
     setImage(product.image || '');
     setIsSetPriced(!!product.isSetPriced);
-    setSetGroupName(product.setGroupName || '');
+    const gName = product.setGroupName || '';
+    setSetGroupName(gName);
+    if (gName && groupNames.includes(gName)) {
+      setGroupSelectValue(gName);
+    } else if (gName) {
+      setGroupSelectValue('__new__');
+    } else {
+      setGroupSelectValue('');
+    }
     const tiers = product.setTiers || [];
     setTier1Qty(tiers[0]?.quantity?.toString() || '1');
     setTier1Price(tiers[0]?.price?.toString() || '');
@@ -93,6 +114,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setImage('');
     setIsSetPriced(false);
     setSetGroupName('');
+    setGroupSelectValue('');
     setTier1Qty('1');
     setTier1Price('');
     setTier2Qty('');
@@ -101,6 +123,36 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setTier3Price('');
     setFormError('');
     setIsModalOpen(true);
+  };
+
+  // Handle group select changes
+  const handleGroupSelectChange = (val) => {
+    setGroupSelectValue(val);
+    if (val === '__new__') {
+      setSetGroupName('');
+      setTier1Qty('1');
+      setTier1Price(price || '');
+      setTier2Qty('');
+      setTier2Price('');
+      setTier3Qty('');
+      setTier3Price('');
+    } else if (val === '') {
+      setSetGroupName('');
+    } else {
+      setSetGroupName(val);
+      const tiers = availableGroups[val] || [];
+      setTier1Qty(tiers[0]?.quantity?.toString() || '1');
+      setTier1Price(tiers[0]?.price?.toString() || '');
+      setTier2Qty(tiers[1]?.quantity?.toString() || '');
+      setTier2Price(tiers[1]?.price?.toString() || '');
+      setTier3Qty(tiers[2]?.quantity?.toString() || '');
+      setTier3Price(tiers[2]?.price?.toString() || '');
+      
+      // Auto-prefill regularly priced field
+      if (tiers[0]?.price) {
+        setPrice(tiers[0].price.toString());
+      }
+    }
   };
 
   // Auto generate 13 digit barcode
@@ -461,6 +513,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                     setCategory(newCat);
                     if (newCat === 'Stickers') {
                       setIsSetPriced(true);
+                      const hasStickers = groupNames.includes('Stickers');
+                      setGroupSelectValue(hasStickers ? 'Stickers' : '__new__');
                       setSetGroupName('Stickers');
                       setPrice('10.00');
                       setTier1Qty('1');
@@ -505,15 +559,31 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                   gap: '0.75rem'
                 }}>
                   <div style={styles.formGroup}>
-                    <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Set Group Name (Items in same group bundle together)</label>
-                    <input 
-                      type="text" 
-                      placeholder="E.g., Stickers, Pins" 
+                    <label style={{ ...styles.formLabel, fontSize: '0.75rem' }}>Set Group Name</label>
+                    <select 
+                      value={groupSelectValue}
+                      onChange={(e) => handleGroupSelectChange(e.target.value)}
                       className="custom-input"
-                      style={{ fontSize: '0.85rem' }}
-                      value={setGroupName}
-                      onChange={(e) => setSetGroupName(e.target.value)}
-                    />
+                      style={{ width: '100%', fontSize: '0.85rem', marginBottom: groupSelectValue === '__new__' ? '0.5rem' : '0' }}
+                    >
+                      <option value="">-- Select Existing Group --</option>
+                      {groupNames.map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                      <option value="__new__">+ Create New Group...</option>
+                    </select>
+
+                    {groupSelectValue === '__new__' && (
+                      <input 
+                        type="text" 
+                        placeholder="Type new group name (e.g., Pins, Prints)..." 
+                        className="custom-input"
+                        style={{ fontSize: '0.85rem', width: '100%' }}
+                        value={setGroupName}
+                        onChange={(e) => setSetGroupName(e.target.value)}
+                        required
+                      />
+                    )}
                   </div>
                   
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
