@@ -93,12 +93,18 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
       setGroupSelectValue('');
     }
     const tiers = product.setTiers || [];
+    const getDiscountVal = (t) => {
+      if (!t) return '';
+      if (t.discount !== undefined) return t.discount.toString();
+      if (t.price !== undefined) return Math.max(0, product.price * t.quantity - t.price).toString();
+      return '';
+    };
     setTier1Qty(tiers[0]?.quantity?.toString() || '1');
-    setTier1Discount(tiers[0]?.discount?.toString() || '0');
+    setTier1Discount(getDiscountVal(tiers[0]) || '0');
     setTier2Qty(tiers[1]?.quantity?.toString() || '');
-    setTier2Discount(tiers[1]?.discount?.toString() || '');
+    setTier2Discount(getDiscountVal(tiers[1]));
     setTier3Qty(tiers[2]?.quantity?.toString() || '');
-    setTier3Discount(tiers[2]?.discount?.toString() || '');
+    setTier3Discount(getDiscountVal(tiers[2]));
     setIsModalOpen(true);
   };
 
@@ -141,12 +147,19 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     } else {
       setSetGroupName(val);
       const tiers = availableGroups[val] || [];
+      const basePrice = parseFloat(price) || 0;
+      const getDiscountVal = (t) => {
+        if (!t) return '';
+        if (t.discount !== undefined) return t.discount.toString();
+        if (t.price !== undefined) return Math.max(0, basePrice * t.quantity - t.price).toString();
+        return '';
+      };
       setTier1Qty(tiers[0]?.quantity?.toString() || '1');
-      setTier1Discount(tiers[0]?.discount?.toString() || '0');
+      setTier1Discount(getDiscountVal(tiers[0]) || '0');
       setTier2Qty(tiers[1]?.quantity?.toString() || '');
-      setTier2Discount(tiers[1]?.discount?.toString() || '');
+      setTier2Discount(getDiscountVal(tiers[1]));
       setTier3Qty(tiers[2]?.quantity?.toString() || '');
-      setTier3Discount(tiers[2]?.discount?.toString() || '');
+      setTier3Discount(getDiscountVal(tiers[2]));
     }
   };
 

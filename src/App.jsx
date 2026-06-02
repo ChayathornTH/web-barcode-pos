@@ -15,6 +15,58 @@ import {
   resetInventoryCatalog as resetInventoryFirebase 
 } from './firebase';
 
+const normalizeProducts = (items) => {
+  if (!Array.isArray(items)) return [];
+  return items.map(p => {
+    if (p.isSetPriced && Array.isArray(p.setTiers)) {
+      const basePrice = p.price || 0;
+      const normalizedTiers = p.setTiers.map(t => {
+        if (t.discount === undefined && t.price !== undefined) {
+          return {
+            ...t,
+            discount: Math.max(0, basePrice * t.quantity - t.price)
+          };
+        }
+        return {
+          ...t,
+          discount: typeof t.discount === 'number' ? t.discount : (parseFloat(t.discount) || 0)
+        };
+      });
+      return {
+        ...p,
+        setTiers: normalizedTiers
+      };
+    }
+    return p;
+  });
+};
+
+const normalizeCart = (cartItems) => {
+  if (!Array.isArray(cartItems)) return [];
+  return cartItems.map(item => {
+    if (item.isSetPriced && Array.isArray(item.setTiers)) {
+      const basePrice = item.price || 0;
+      const normalizedTiers = item.setTiers.map(t => {
+        if (t.discount === undefined && t.price !== undefined) {
+          return {
+            ...t,
+            discount: Math.max(0, basePrice * t.quantity - t.price)
+          };
+        }
+        return {
+          ...t,
+          discount: typeof t.discount === 'number' ? t.discount : (parseFloat(t.discount) || 0)
+        };
+      });
+      return {
+        ...item,
+        setTiers: normalizedTiers
+      };
+    }
+    return item;
+  });
+};
+
 export default function App() {
   const [activeView, setActiveView] = useState('terminal');
   
@@ -26,13 +78,15 @@ export default function App() {
   // Database States
   const [products, setProducts] = useState(() => {
     const saved = localStorage.getItem('pos_products');
-    return saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
+    const parsed = saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
+    return normalizeProducts(parsed);
   });
 
   // Cart State (Local to device so cashiers don't collide)
   const [cart, setCart] = useState(() => {
     const saved = localStorage.getItem('pos_cart');
-    return saved ? JSON.parse(saved) : [];
+    const parsed = saved ? JSON.parse(saved) : [];
+    return normalizeCart(parsed);
   });
 
   // Sales History State
@@ -83,7 +137,7 @@ export default function App() {
     
     // Subscribe to products sub-collection
     const unsubscribeProds = subscribeToProducts(boothId, (items) => {
-      setProducts(items);
+      setProducts(normalizeProducts(items));
     });
 
     // Subscribe to sales sub-collection
@@ -121,7 +175,7 @@ export default function App() {
       
       // Load offline presets
       const savedProds = localStorage.getItem('pos_products');
-      setProducts(savedProds ? JSON.parse(savedProds) : DEFAULT_PRODUCTS);
+      setProducts(savedProds ? normalizeProducts(JSON.parse(savedProds)) : DEFAULT_PRODUCTS);
       const savedHistory = localStorage.getItem('pos_sales_history');
       setSalesHistory(savedHistory ? JSON.parse(savedHistory) : []);
     }

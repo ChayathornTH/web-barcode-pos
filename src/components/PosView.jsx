@@ -81,7 +81,11 @@ export default function PosView({
   const formatTiersInfo = (product) => {
     if (!product.isSetPriced || !product.setTiers || product.setTiers.length <= 1) return "";
     const discountTiers = product.setTiers.filter(t => t.quantity > 1);
-    return discountTiers.map(t => `${t.quantity} = -฿${t.discount.toFixed(0)}`).join(', ');
+    return discountTiers.map(t => {
+      const disc = t.discount !== undefined ? t.discount : Math.max(0, (product.price || 0) * t.quantity - (t.price || 0));
+      const discNum = typeof disc === 'number' ? disc : (parseFloat(disc) || 0);
+      return `${t.quantity} = -฿${discNum.toFixed(0)}`;
+    }).join(', ');
   };
 
   // Handle product click in catalog (Simulates a fast barcode scan)
@@ -120,9 +124,14 @@ export default function PosView({
   };
 
   // Generic Optimal Set Discount Calculation
-  const calculateOptimalGroupDiscount = (qty, tiers) => {
+  const calculateOptimalGroupDiscount = (qty, tiers, basePrice = 10.00) => {
     if (qty <= 0 || !tiers || tiers.length === 0) return 0;
-    const validTiers = tiers.filter(t => t.quantity > 0 && t.discount >= 0);
+    const validTiers = tiers.map(t => {
+      const disc = t.discount !== undefined ? t.discount : Math.max(0, basePrice * t.quantity - (t.price || 0));
+      const discNum = typeof disc === 'number' ? disc : (parseFloat(disc) || 0);
+      return { quantity: t.quantity, discount: discNum };
+    }).filter(t => t.quantity > 0 && t.discount >= 0);
+
     if (validTiers.length === 0) return 0;
 
     validTiers.sort((a, b) => a.quantity - b.quantity);
@@ -159,7 +168,8 @@ export default function PosView({
   Object.keys(setGroups).forEach(groupKey => {
     const group = setGroups[groupKey];
     const totalQty = group.items.reduce((sum, i) => sum + i.quantity, 0);
-    const discount = calculateOptimalGroupDiscount(totalQty, group.tiers);
+    const basePrice = group.items[0]?.price || 10.00;
+    const discount = calculateOptimalGroupDiscount(totalQty, group.tiers, basePrice);
     if (discount > 0) {
       setDiscounts.push({
         groupName: groupKey.startsWith('single-') ? group.items[0].name : `${groupKey} Set`,
