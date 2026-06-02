@@ -339,6 +339,25 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         </div>
       </div>
 
+      {/* GitHub products.csv Sync Warning Banner */}
+      <div className="glass-panel" style={{
+        padding: '0.75rem 1rem',
+        borderRadius: '8px',
+        backgroundColor: 'rgba(59, 130, 246, 0.08)',
+        border: '1px solid rgba(59, 130, 246, 0.25)',
+        color: 'var(--text-primary)',
+        fontSize: '0.85rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.75rem',
+        marginBottom: '1.25rem'
+      }}>
+        <span style={{ fontSize: '1.2rem' }}>💡</span>
+        <span>
+          <strong>GitHub Ledger Sync:</strong> Your product catalog is loaded dynamically from <code>products.csv</code> in your GitHub repository. Update that spreadsheet file on GitHub to change items permanently for all cashiers.
+        </span>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="glass-panel" style={styles.filterBar}>
         <div style={styles.searchWrapper}>

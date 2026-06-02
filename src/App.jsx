@@ -5,14 +5,10 @@ import InventoryView from './components/InventoryView';
 import DashboardView from './components/DashboardView';
 import { ShoppingCart, Database, LayoutDashboard, Settings, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { 
-  subscribeToProducts, 
   subscribeToSalesHistory, 
   addSaleRecord, 
   updateProductStock, 
-  addProductRecord, 
-  deleteProductRecord, 
-  resetSalesHistory as resetSalesFirebase, 
-  resetInventoryCatalog as resetInventoryFirebase 
+  resetSalesHistory as resetSalesFirebase
 } from './firebase';
 
 const normalizeProducts = (items) => {
@@ -81,6 +77,69 @@ const normalizeCart = (cartItems) => {
   });
 };
 
+const parseCSVProducts = (text) => {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  if (lines.length <= 1) return [];
+
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const parsed = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const row = [];
+    let current = '';
+    let insideQuote = false;
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      if (char === '"') {
+        insideQuote = !insideQuote;
+      } else if (char === ',' && !insideQuote) {
+        row.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    row.push(current.trim());
+
+    const product = {};
+    headers.forEach((header, index) => {
+      let val = row[index] || '';
+      val = val.replace(/^["']|["']$/g, '').trim();
+      
+      const key = header.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (key === 'barcode') product.barcode = val;
+      else if (key === 'name') product.name = val;
+      else if (key === 'price') product.price = parseFloat(val) || 0;
+      else if (key === 'category') product.category = val || 'Other';
+      else if (key === 'stock') product.stock = parseInt(val) || 0;
+      else if (key === 'artist' || key === 'owner') product.artist = val || 'Unknown';
+      else if (key === 'emoji') product.emoji = val || '📦';
+      else if (key === 'image') product.image = val;
+      else if (key === 'description') product.description = val;
+      else if (key === 'issetpriced') product.isSetPriced = val.toLowerCase() === 'true';
+      else if (key === 'setgroupname') product.setGroupName = val;
+    });
+
+    product.id = product.id || `prod-${product.barcode || Math.random().toString(36).substr(2, 9)}`;
+
+    if (product.isSetPriced && (!product.setTiers || product.setTiers.length === 0)) {
+      product.setTiers = [
+        { quantity: 1, price: product.price, discount: 0 },
+        { quantity: 3, price: 25.00, discount: Math.max(0, product.price * 3 - 25.00) },
+        { quantity: 5, price: 35.00, discount: Math.max(0, product.price * 5 - 35.00) }
+      ];
+    }
+
+    parsed.push(product);
+  }
+
+  return normalizeProducts(parsed);
+};
+
 export default function App() {
   const [activeView, setActiveView] = useState('terminal');
   
@@ -95,6 +154,8 @@ export default function App() {
     const parsed = saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
     return normalizeProducts(parsed);
   });
+
+
 
   // Cart State (Local to device so cashiers don't collide)
   const [cart, setCart] = useState(() => {
@@ -124,6 +185,30 @@ export default function App() {
     }, 3500);
   };
 
+  // Load products dynamically from public/products.csv on mount
+  useEffect(() => {
+    const loadProductsFromCSV = async () => {
+      try {
+        const basePath = import.meta.env.BASE_URL || '/';
+        const url = `${basePath}products.csv`.replace(/\/+/g, '/');
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to load products.csv: ${response.statusText}`);
+        }
+        const csvText = await response.text();
+        const parsed = parseCSVProducts(csvText);
+        if (parsed && parsed.length > 0) {
+          setProducts(parsed);
+          localStorage.setItem('pos_products', JSON.stringify(parsed));
+          addToast(`Loaded ${parsed.length} products from products.csv`, 'success');
+        }
+      } catch (error) {
+        console.error("Failed to load products from CSV, using cached catalog:", error);
+      }
+    };
+    loadProductsFromCSV();
+  }, []);
+
   // Sync LOCAL states to local storage (only when NOT using cloud sync)
   useEffect(() => {
     if (!boothId) {
@@ -149,11 +234,6 @@ export default function App() {
       addToast(`Syncing with cloud booth: "${boothId}"`, 'info');
     }, 0);
     
-    // Subscribe to products sub-collection
-    const unsubscribeProds = subscribeToProducts(boothId, (items) => {
-      setProducts(normalizeProducts(items));
-    });
-
     // Subscribe to sales sub-collection
     const unsubscribeSales = subscribeToSalesHistory(boothId, (history) => {
       setSalesHistory(history);
@@ -161,7 +241,6 @@ export default function App() {
 
     return () => {
       clearTimeout(timer);
-      unsubscribeProds();
       unsubscribeSales();
     };
   }, [boothId]);
@@ -220,16 +299,17 @@ export default function App() {
         }
       });
 
-      // Update inventory stock (decrement by 1)
+      // Update inventory stock (decrement by 1) locally
       const newStock = Math.max(0, matchedProduct.stock - 1);
+      setProducts((prevProducts) => 
+        prevProducts.map(p => 
+          p.id === matchedProduct.id ? { ...p, stock: newStock } : p
+        )
+      );
       if (boothId) {
-        updateProductStock(boothId, matchedProduct.id, newStock);
-      } else {
-        setProducts((prevProducts) => 
-          prevProducts.map(p => 
-            p.id === matchedProduct.id ? { ...p, stock: newStock } : p
-          )
-        );
+        updateProductStock(boothId, matchedProduct.id, newStock).catch(e => {
+          console.warn("Could not sync stock to Firebase:", e);
+        });
       }
 
       setLastScannedItem({ ...matchedProduct, barcode: barcodeString });
@@ -282,12 +362,18 @@ export default function App() {
 
   // Inventory Management Actions
   const handleAddProduct = (newProd) => {
-    if (boothId) {
-      addProductRecord(boothId, newProd);
-    } else {
-      setProducts((prev) => [newProd, ...prev]);
+    let finalProd = { ...newProd };
+    if (newProd.isSetPriced && newProd.setGroupName) {
+      const matchingGroupProd = products.find(p => p.isSetPriced && p.setGroupName === newProd.setGroupName);
+      if (matchingGroupProd && (!newProd.setTiers || newProd.setTiers.length === 0)) {
+        finalProd.setTiers = matchingGroupProd.setTiers;
+      }
     }
-    addToast(`Registered "${newProd.name}" in inventory catalog.`, 'success');
+
+    const updatedList = [finalProd, ...products];
+    setProducts(updatedList);
+    localStorage.setItem('pos_products', JSON.stringify(updatedList));
+    addToast(`Registered "${finalProd.name}" in inventory catalog locally.`, 'success');
   };
 
   const handleUpdateProduct = async (updatedProd) => {
@@ -343,37 +429,24 @@ export default function App() {
       }
     }
 
-    if (boothId) {
-      for (const p of updatedList) {
-        const current = products.find(curr => curr.id === p.id);
-        if (JSON.stringify(current) !== JSON.stringify(p)) {
-          await addProductRecord(boothId, p);
-        }
-      }
-    } else {
-      setProducts(updatedList);
-    }
-    addToast(`Updated product: ${updatedProd.name} and synced group settings.`, 'info');
+    // Update local state and offline cache
+    setProducts(updatedList);
+    localStorage.setItem('pos_products', JSON.stringify(updatedList));
+    addToast(`Updated product: ${updatedProd.name} and synced group settings locally.`, 'info');
   };
 
   const handleDeleteProduct = (id) => {
     const prod = products.find(p => p.id === id);
-    if (boothId) {
-      deleteProductRecord(boothId, id);
-    } else {
-      setProducts((prev) => prev.filter(p => p.id !== id));
-    }
-    addToast(`Deleted "${prod?.name || 'product'}" from database.`, 'warning');
+    const updatedList = products.filter(p => p.id !== id);
+    setProducts(updatedList);
+    localStorage.setItem('pos_products', JSON.stringify(updatedList));
+    addToast(`Deleted "${prod?.name || 'product'}" from local catalog.`, 'warning');
   };
 
   const handleResetInventory = () => {
     if (window.confirm("Are you sure you want to restore the default inventory catalog? This will overwrite custom products.")) {
-      if (boothId) {
-        resetInventoryFirebase(boothId);
-      } else {
-        setProducts(DEFAULT_PRODUCTS);
-        localStorage.removeItem('pos_products');
-      }
+      setProducts(DEFAULT_PRODUCTS);
+      localStorage.setItem('pos_products', JSON.stringify(DEFAULT_PRODUCTS));
       addToast("Restored default product catalog.", "info");
     }
   };
@@ -433,10 +506,11 @@ export default function App() {
     
     if (prod) {
       const newStock = prod.stock - _qtyDiff;
+      setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: newStock } : p));
       if (boothId) {
-        updateProductStock(boothId, id, newStock);
-      } else {
-        setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: newStock } : p));
+        updateProductStock(boothId, id, newStock).catch(e => {
+          console.warn("Could not sync stock to Firebase:", e);
+        });
       }
     }
   };
@@ -446,13 +520,14 @@ export default function App() {
     if (!item) return;
 
     if (!item.id.startsWith('custom-')) {
+      setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: p.stock + item.quantity } : p));
       if (boothId) {
         const prod = products.find(p => p.id === id);
         if (prod) {
-          updateProductStock(boothId, id, prod.stock + item.quantity);
+          updateProductStock(boothId, id, prod.stock + item.quantity).catch(e => {
+            console.warn("Could not sync stock to Firebase:", e);
+          });
         }
-      } else {
-        setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: p.stock + item.quantity } : p));
       }
     }
     
@@ -461,26 +536,28 @@ export default function App() {
   };
 
   const handleClearCart = () => {
+    setProducts((prevProducts) => {
+      let updated = [...prevProducts];
+      cart.forEach(cartItem => {
+        if (!cartItem.id.startsWith('custom-')) {
+          updated = updated.map(p => 
+            p.id === cartItem.id ? { ...p, stock: p.stock + cartItem.quantity } : p
+          );
+        }
+      });
+      return updated;
+    });
+
     if (boothId) {
       cart.forEach(cartItem => {
         if (!cartItem.id.startsWith('custom-')) {
           const prod = products.find(p => p.id === cartItem.id);
           if (prod) {
-            updateProductStock(boothId, cartItem.id, prod.stock + cartItem.quantity);
+            updateProductStock(boothId, cartItem.id, prod.stock + cartItem.quantity).catch(e => {
+              console.warn("Could not sync stock to Firebase:", e);
+            });
           }
         }
-      });
-    } else {
-      setProducts((prevProducts) => {
-        let updated = [...prevProducts];
-        cart.forEach(cartItem => {
-          if (!cartItem.id.startsWith('custom-')) {
-            updated = updated.map(p => 
-              p.id === cartItem.id ? { ...p, stock: p.stock + cartItem.quantity } : p
-            );
-          }
-        });
-        return updated;
       });
     }
 
