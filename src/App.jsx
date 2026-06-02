@@ -379,7 +379,7 @@ export default function App() {
   };
 
   // Custom Item sale injection (adds virtual art commissions directly to cart)
-  const handleAddCustomCartItem = (name, price, category = 'Other') => {
+  const handleAddCustomCartItem = (name, price, category = 'Other', artist = 'Unknown') => {
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum <= 0) {
       addToast("Invalid custom item price.", "error");
@@ -393,18 +393,19 @@ export default function App() {
       category: category,
       stock: 999,
       emoji: "🎨",
+      artist: artist.trim() || 'Unknown',
       description: "Custom commissioned art item.",
       isSetPriced: category === 'Stickers',
       setGroupName: category === 'Stickers' ? 'Stickers' : '',
       setTiers: category === 'Stickers' ? [
-        { quantity: 1, discount: 0.00 },
-        { quantity: 3, discount: 5.00 },
-        { quantity: 5, discount: 15.00 }
+        { quantity: 1, price: 10.00, discount: 0.00 },
+        { quantity: 3, price: 25.00, discount: 5.00 },
+        { quantity: 5, price: 35.00, discount: 15.00 }
       ] : []
     };
 
     setCart((prev) => [...prev, { ...customProduct, quantity: 1 }]);
-    addToast(`Added custom "${customProduct.name}" (฿${priceNum.toFixed(2)}) to cart.`, 'success');
+    addToast(`Added custom "${customProduct.name}" (฿${priceNum.toFixed(2)}) by ${customProduct.artist} to cart.`, 'success');
   };
 
   // Cart Management Actions

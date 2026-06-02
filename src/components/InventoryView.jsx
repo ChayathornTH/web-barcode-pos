@@ -53,9 +53,12 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   });
   const groupNames = Object.keys(availableGroups);
 
+  const [selectedArtist, setSelectedArtist] = useState('All');
+
   // Form State
   const [barcode, setBarcode] = useState('');
   const [name, setName] = useState('');
+  const [artist, setArtist] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('Other');
   const [stock, setStock] = useState('');
@@ -77,6 +80,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setEditingProduct(product);
     setBarcode(product.barcode);
     setName(product.name);
+    setArtist(product.artist || '');
     setPrice(product.price.toString());
     setCategory(product.category);
     setStock(product.stock.toString());
@@ -121,6 +125,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setIsSetPriced(false);
     setSetGroupName('');
     setGroupSelectValue('');
+    setArtist('');
     setTier1Qty('1');
     setTier1Price('');
     setTier2Qty('');
@@ -254,6 +259,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         price: priceNum,
         category,
         stock: stockNum,
+        artist: artist.trim(),
         description,
         emoji,
         image,
@@ -270,6 +276,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         price: priceNum,
         category,
         stock: stockNum,
+        artist: artist.trim(),
         description,
         emoji,
         image,
@@ -282,13 +289,17 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setIsModalOpen(false);
   };
 
+  const uniqueArtists = Array.from(new Set(products.map(p => p.artist || 'Unknown').filter(Boolean))).sort();
+
   // Filter products and sort so items in the same group are next to each other
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           p.barcode.includes(searchTerm) || 
+                          p.artist?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           p.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const matchesArtist = selectedArtist === 'All' || (p.artist || 'Unknown') === selectedArtist;
+    return matchesSearch && matchesCategory && matchesArtist;
   }).sort((a, b) => {
     const aGroup = (a.isSetPriced && a.setGroupName) ? a.setGroupName.trim().toLowerCase() : '';
     const bGroup = (b.isSetPriced && b.setGroupName) ? b.setGroupName.trim().toLowerCase() : '';
@@ -341,18 +352,33 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div style={styles.categorySelectWrapper}>
-          <select 
-            value={selectedCategory} 
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="custom-input"
-            style={styles.categorySelect}
-          >
-            <option value="All">All Categories</option>
-            {CATEGORIES.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div style={styles.categorySelectWrapper}>
+            <select 
+              value={selectedCategory} 
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="custom-input"
+              style={styles.categorySelect}
+            >
+              <option value="All">All Categories</option>
+              {CATEGORIES.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+          <div style={styles.categorySelectWrapper}>
+            <select 
+              value={selectedArtist} 
+              onChange={(e) => setSelectedArtist(e.target.value)}
+              className="custom-input"
+              style={styles.categorySelect}
+            >
+              <option value="All">All Artists</option>
+              {uniqueArtists.map(art => (
+                <option key={art} value={art}>{art}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -396,6 +422,9 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                     )}
                   </div>
                   <h4 style={styles.productName}>{product.name}</h4>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600, marginTop: '0.15rem' }}>
+                    🎨 {product.artist || "Unknown"}
+                  </div>
                 </div>
               </div>
 
@@ -539,34 +568,47 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                 </div>
               </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Category</label>
-                <select 
-                  value={category} 
-                  onChange={(e) => {
-                    const newCat = e.target.value;
-                    setCategory(newCat);
-                    if (newCat === 'Stickers') {
-                      setIsSetPriced(true);
-                      const hasStickers = groupNames.includes('Stickers');
-                      setGroupSelectValue(hasStickers ? 'Stickers' : '__new__');
-                      setSetGroupName('Stickers');
-                      setPrice('10.00');
-                      setTier1Qty('1');
-                      setTier1Price('10.00');
-                      setTier2Qty('3');
-                      setTier2Price('25.00');
-                      setTier3Qty('5');
-                      setTier3Price('35.00');
-                    }
-                  }}
-                  className="custom-input"
-                  style={{ width: '100%' }}
-                >
-                  {CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+               <div style={styles.formRow}>
+                <div style={{ ...styles.formGroup, flex: 1 }}>
+                  <label style={styles.formLabel}>Category</label>
+                  <select 
+                    value={category} 
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      setCategory(newCat);
+                      if (newCat === 'Stickers') {
+                        setIsSetPriced(true);
+                        const hasStickers = groupNames.includes('Stickers');
+                        setGroupSelectValue(hasStickers ? 'Stickers' : '__new__');
+                        setSetGroupName('Stickers');
+                        setPrice('10.00');
+                        setTier1Qty('1');
+                        setTier1Price('10.00');
+                        setTier2Qty('3');
+                        setTier2Price('25.00');
+                        setTier3Qty('5');
+                        setTier3Price('35.00');
+                      }
+                    }}
+                    className="custom-input"
+                    style={{ width: '100%' }}
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ ...styles.formGroup, flex: 1 }}>
+                  <label style={styles.formLabel}>Artist / Owner *</label>
+                  <input 
+                    type="text" 
+                    placeholder="E.g., Alice, Bob" 
+                    className="custom-input"
+                    value={artist}
+                    onChange={(e) => setArtist(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', padding: '0.5rem', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.2)' }}>

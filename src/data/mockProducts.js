@@ -8,6 +8,7 @@ export const DEFAULT_PRODUCTS = [
     stock: 5,
     emoji: "🎨",
     image: "/web-barcode-pos/product-images/acrylic_canvas.png",
+    artist: "Alice",
     description: "Hand-painted original acrylic canvas with easel."
   },
   {
@@ -19,6 +20,7 @@ export const DEFAULT_PRODUCTS = [
     stock: 3,
     emoji: "🌸",
     image: "/web-barcode-pos/product-images/watercolor_landscape.png",
+    artist: "Bob",
     description: "Original watercolor on high-grade archival paper."
   },
   {
@@ -30,6 +32,7 @@ export const DEFAULT_PRODUCTS = [
     stock: 60,
     emoji: "✨",
     image: "/web-barcode-pos/product-images/holo_stickers.png",
+    artist: "Charlie",
     description: "Waterproof, die-cut holographic vinyl stickers."
   },
   {
@@ -41,6 +44,7 @@ export const DEFAULT_PRODUCTS = [
     stock: 25,
     emoji: "🖼️",
     image: "/web-barcode-pos/product-images/starry_sky_print.png",
+    artist: "Alice",
     description: "Premium matte print of the original oil painting."
   },
   {
@@ -51,6 +55,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Prints",
     stock: 25,
     emoji: "☕",
+    artist: "Bob",
     description: "Warm-toned illustration print on 300gsm paper."
   },
   {
@@ -61,6 +66,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Accessories",
     stock: 20,
     emoji: "🔑",
+    artist: "Charlie",
     description: "Double-sided clear acrylic keychain."
   },
   {
@@ -71,6 +77,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Accessories",
     stock: 35,
     emoji: "📌",
+    artist: "Alice",
     description: "Hard enamel pin with gold metal finish."
   },
   {
@@ -81,6 +88,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Prints",
     stock: 45,
     emoji: "✉️",
+    artist: "Bob",
     description: "Mini prints styled as writeable postcards."
   },
   {
@@ -91,6 +99,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Stationery",
     stock: 10,
     emoji: "📓",
+    artist: "Charlie",
     description: "Blank pages sketchbook with hand-drawn cover art."
   },
   {
@@ -101,6 +110,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Paintings",
     stock: 4,
     emoji: "🖼️",
+    artist: "Alice",
     description: "Framed 3x3 inch mini gouache painting."
   },
   {
@@ -118,6 +128,7 @@ export const DEFAULT_PRODUCTS = [
       { quantity: 3, price: 25.00, discount: 5.00 },
       { quantity: 5, price: 35.00, discount: 15.00 }
     ],
+    artist: "Bob",
     description: "Matte vinyl sticker of various cute characters."
   },
   {
@@ -128,6 +139,7 @@ export const DEFAULT_PRODUCTS = [
     category: "Stationery",
     stock: 50,
     emoji: "🎞️",
+    artist: "Charlie",
     description: "Decorative paper tape for bullet journals."
   }
 ];

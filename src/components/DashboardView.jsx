@@ -64,6 +64,45 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     }))
     .sort((a, b) => b.amount - a.amount);
 
+  // Artist Distribution (Proportional Net Share Split)
+  const artistSales = {};
+  salesHistory.forEach(sale => {
+    const subtotal = sale.subtotal || 1;
+    const total = sale.total;
+    
+    const receiptArtistTotals = {};
+    sale.items.forEach(item => {
+      const name = item.artist || 'Unknown';
+      if (!receiptArtistTotals[name]) {
+        receiptArtistTotals[name] = { subtotal: 0, quantity: 0 };
+      }
+      receiptArtistTotals[name].subtotal += (item.price * item.quantity);
+      receiptArtistTotals[name].quantity += item.quantity;
+    });
+
+    Object.keys(receiptArtistTotals).forEach(name => {
+      const stats = receiptArtistTotals[name];
+      if (!artistSales[name]) {
+        artistSales[name] = { gross: 0, net: 0, quantity: 0 };
+      }
+      artistSales[name].gross += stats.subtotal;
+      artistSales[name].quantity += stats.quantity;
+      const netShare = subtotal > 0 ? (stats.subtotal / subtotal) * total : 0;
+      artistSales[name].net += netShare;
+    });
+  });
+
+  const totalArtistNetSales = Object.values(artistSales).reduce((a, b) => a + b.net, 0) || 1;
+  const sortedArtists = Object.entries(artistSales)
+    .map(([artist, data]) => ({
+      artist,
+      gross: data.gross,
+      net: data.net,
+      quantity: data.quantity,
+      percent: (data.net / totalArtistNetSales) * 100
+    }))
+    .sort((a, b) => b.net - a.net);
+
   // Export ledger list to CSV format
   const handleExportCSV = () => {
     if (salesHistory.length === 0) return;
@@ -73,6 +112,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       "Timestamp", 
       "Product Name", 
       "Category", 
+      "Artist",
       "Quantity", 
       "Unit Price (฿)", 
       "Line Subtotal (฿)", 
@@ -90,6 +130,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
           sale.timestamp,
           item.name,
           item.category,
+          item.artist || 'Unknown',
           item.quantity,
           item.price.toFixed(2),
           (item.price * item.quantity).toFixed(2),
@@ -299,6 +340,41 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                       ...styles.barFill,
                       width: `${cat.percent}%`,
                       backgroundColor: idx % 3 === 0 ? 'var(--primary)' : idx % 3 === 1 ? 'var(--accent)' : 'var(--success)'
+                    }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Artist Distribution */}
+        <div className="glass-panel" style={styles.chartCard}>
+          <h3 style={styles.cardTitle}>Sales by Artist</h3>
+          
+          {sortedArtists.length === 0 ? (
+            <div style={styles.emptyCategories}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No artist sales recorded yet.</p>
+            </div>
+          ) : (
+            <div style={styles.categoryList}>
+              {sortedArtists.map((art, idx) => (
+                <div key={idx} style={styles.categoryRow}>
+                  <div style={styles.categoryMeta}>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>🎨 {art.artist}</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                      Net: ฿{art.net.toFixed(2)} (Gross: ฿{art.gross.toFixed(2)})
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
+                    <span>{art.quantity} items sold</span>
+                    <span>{Math.round(art.percent)}% share</span>
+                  </div>
+                  <div style={styles.barTrack}>
+                    <div style={{
+                      ...styles.barFill,
+                      width: `${art.percent}%`,
+                      backgroundColor: idx % 3 === 0 ? 'var(--accent)' : idx % 3 === 1 ? 'var(--primary)' : 'var(--success)'
                     }}></div>
                   </div>
                 </div>
