@@ -1,0 +1,13 @@
+Barcode,Name,Price,Category,Stock,Artist,Emoji,Image,Description,IsSetPriced,SetGroupName
+2001,"Original Acrylic Canvas (8x8)",45.00,Paintings,5,Alice,🎨,/web-barcode-pos/product-images/acrylic_canvas.png,"Hand-painted original acrylic canvas with easel.",false,
+2002,"Original Watercolor Landscape",35.00,Paintings,3,Bob,🌸,/web-barcode-pos/product-images/watercolor_landscape.png,"Original watercolor on high-grade archival paper.",false,
+2003,"Holographic Sticker Pack (5pcs)",12.00,Stickers,60,Charlie,✨,/web-barcode-pos/product-images/holo_stickers.png,"Waterproof, die-cut holographic vinyl stickers.",false,
+2004,"Art Print: Starry Sky (A4)",15.00,Prints,25,Alice,🖼️,/web-barcode-pos/product-images/starry_sky_print.png,"Premium matte print of the original oil painting.",false,
+2005,"Art Print: Cozy Coffee Shop (A4)",15.00,Prints,25,Bob,☕,,"Warm-toned illustration print on 300gsm paper.",false,
+2006,"Handmade Acrylic Keychain",8.00,Accessories,20,Charlie,🔑,,"Double-sided clear acrylic keychain.",false,
+2007,"Collectible Enamel Pin",10.00,Accessories,35,Alice,📌,,"Hard enamel pin with gold metal finish.",false,
+2008,"Art Postcard Set (5 designs)",6.00,Prints,45,Bob,✉️,,"Mini prints styled as writeable postcards.",false,
+2009,"Hand-drawn Sketchbook (A5)",22.00,Stationery,10,Charlie,📓,,"Blank pages sketchbook with hand-drawn cover art.",false,
+2010,"Original Gouache Mini Frame",28.00,Paintings,4,Alice,🖼️,,"Framed 3x3 inch mini gouache painting.",false,
+2011,"Individual Die-Cut Sticker",10.00,Stickers,120,Bob,💖,,"Matte vinyl sticker of various cute characters.",true,Stickers
+2012,"Washi Tape Roll",5.00,Stationery,50,Charlie,🎞️,,"Decorative paper tape for bullet journals.",false,
