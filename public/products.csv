@@ -1,7 +1,6 @@
 Barcode,Name,Price,Category,Stock,Artist,Emoji,Image,Description,IsSetPriced,SetGroupName
-2001,Original Acrylic Canvas (8x8),45,Paintings,5,Alice,🎨,/web-barcode-pos/product-images/acrylic_canvas.png,Hand-painted original acrylic canvas with easel.,FALSE,
-3001,DIECUT 100% - 4CM - Duck,10,Sticker,100,Dream,🐈,,,TRUE,Sticker_Dream
-3002,DIECUT 100% - 4CM - Fish,10,Sticker,100,Dream,🐈,,,TRUE,Sticker_Dream
-3003,DIECUT 100% - 4CM - Penguin,10,Sticker,100,Dream,🐈,,,TRUE,Sticker_Dream
-3004,DIECUT 100% - 4CM - Capy,10,Sticker,100,Dream,🐈,,,TRUE,Sticker_Dream
-3005,DIECUT 100% - 4CM - Mouse,10,Sticker,100,Dream,🐈,,,TRUE,Sticker_Dream
+3001,DIECUT 100% - 4CM - Duck,10,Stickers,100,Dream,🐈,,,TRUE,Sticker_Dream
+3002,DIECUT 100% - 4CM - Fish,10,Stickers,100,Dream,🐈,,,TRUE,Sticker_Dream
+3003,DIECUT 100% - 4CM - Penguin,10,Stickers,100,Dream,🐈,,,TRUE,Sticker_Dream
+3004,DIECUT 100% - 4CM - Capy,10,Stickers,100,Dream,🐈,,,TRUE,Sticker_Dream
+3005,DIECUT 100% - 4CM - Mouse,10,Stickers,100,Dream,🐈,,,TRUE,Sticker_Dream
