@@ -331,7 +331,11 @@ export default function App() {
     const matchedProduct = products.find(p => p.barcode === barcodeString);
 
     if (matchedProduct) {
-      if (matchedProduct.stock === 0) {
+      // Find how many of this item are already in the cart
+      const cartItem = cart.find(item => item.id === matchedProduct.id);
+      const currentQty = cartItem ? cartItem.quantity : 0;
+
+      if (matchedProduct.stock === 0 || currentQty >= matchedProduct.stock) {
         addToast(`"${matchedProduct.name}" is out of stock!`, 'warning');
         return false;
       }
@@ -350,19 +354,6 @@ export default function App() {
         }
       });
 
-      // Update inventory stock (decrement by 1) locally
-      const newStock = Math.max(0, matchedProduct.stock - 1);
-      setProducts((prevProducts) => 
-        prevProducts.map(p => 
-          p.id === matchedProduct.id ? { ...p, stock: newStock } : p
-        )
-      );
-      if (boothId) {
-        updateProductStock(boothId, matchedProduct.id, newStock).catch(e => {
-          console.warn("Could not sync stock to Firebase:", e);
-        });
-      }
-
       setLastScannedItem({ ...matchedProduct, barcode: barcodeString });
       setActiveView('terminal');
 
@@ -372,7 +363,7 @@ export default function App() {
       addToast(`Unknown Barcode: "${barcodeString}". Register it in inventory.`, 'error');
       return false;
     }
-  }, [products, boothId]);
+  }, [products, cart]);
 
   // Keyboard wedge listener for physical barcode scanners
   useEffect(() => {
@@ -606,92 +597,72 @@ export default function App() {
 
     const item = cart.find(c => c.id === id);
     const prod = products.find(p => p.id === id);
-    const _qtyDiff = newQty - item.quantity;
+
+    if (!item) return;
 
     if (prod && prod.id.startsWith('custom-')) {
       setCart((prev) => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
       return;
     }
 
-    if (prod && prod.stock < _qtyDiff) {
+    if (prod && prod.stock < newQty) {
       addToast(`Cannot add more. Only ${prod.stock} items left in stock.`, 'warning');
       return;
     }
 
     setCart((prev) => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
-    
-    if (prod) {
-      const newStock = prod.stock - _qtyDiff;
-      setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: newStock } : p));
-      if (boothId) {
-        updateProductStock(boothId, id, newStock).catch(e => {
-          console.warn("Could not sync stock to Firebase:", e);
-        });
-      }
-    }
   };
 
   const handleRemoveFromCart = (id) => {
     const item = cart.find(c => c.id === id);
     if (!item) return;
-
-    if (!item.id.startsWith('custom-')) {
-      setProducts((prev) => prev.map(p => p.id === id ? { ...p, stock: p.stock + item.quantity } : p));
-      if (boothId) {
-        const prod = products.find(p => p.id === id);
-        if (prod) {
-          updateProductStock(boothId, id, prod.stock + item.quantity).catch(e => {
-            console.warn("Could not sync stock to Firebase:", e);
-          });
-        }
-      }
-    }
     
     setCart((prev) => prev.filter(c => c.id !== id));
     addToast(`Removed "${item.name}" from cart.`, 'info');
   };
 
   const handleClearCart = () => {
-    setProducts((prevProducts) => {
-      let updated = [...prevProducts];
-      cart.forEach(cartItem => {
-        if (!cartItem.id.startsWith('custom-')) {
-          updated = updated.map(p => 
-            p.id === cartItem.id ? { ...p, stock: p.stock + cartItem.quantity } : p
-          );
-        }
-      });
-      return updated;
-    });
-
-    if (boothId) {
-      cart.forEach(cartItem => {
-        if (!cartItem.id.startsWith('custom-')) {
-          const prod = products.find(p => p.id === cartItem.id);
-          if (prod) {
-            updateProductStock(boothId, cartItem.id, prod.stock + cartItem.quantity).catch(e => {
-              console.warn("Could not sync stock to Firebase:", e);
-            });
-          }
-        }
-      });
-    }
-
     setCart([]);
     setLastScannedItem(null);
     addToast("Cart cleared.", "info");
   };
 
   // Checkout simulation logger
-  const handleCheckout = (receipt) => {
-    if (boothId) {
-      addSaleRecord(boothId, receipt);
-    } else {
-      setSalesHistory((prev) => [receipt, ...prev]);
+  const handleCheckout = async (receipt) => {
+    try {
+      if (boothId) {
+        // Update database stock levels for all purchased non-custom items
+        for (const item of cart) {
+          if (!item.id.startsWith('custom-')) {
+            const prod = products.find(p => p.id === item.id);
+            if (prod) {
+              const newStock = Math.max(0, prod.stock - item.quantity);
+              await updateProductStock(boothId, item.id, newStock);
+            }
+          }
+        }
+        await addSaleRecord(boothId, receipt);
+      } else {
+        // Update local stock levels
+        setProducts((prevProducts) => 
+          prevProducts.map(p => {
+            const cartItem = cart.find(item => item.id === p.id);
+            if (cartItem) {
+              return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
+            }
+            return p;
+          })
+        );
+        setSalesHistory((prev) => [receipt, ...prev]);
+      }
+      
+      setCart([]); 
+      setLastScannedItem(null);
+      addToast(`Transaction ${receipt.id} processed successfully!`, 'success');
+    } catch (err) {
+      console.error("Checkout stock update failed:", err);
+      addToast("Failed to process transaction inventory update.", "error");
     }
-    setCart([]); 
-    setLastScannedItem(null);
-    addToast(`Transaction ${receipt.id} processed successfully!`, 'success');
   };
 
   const handleResetSalesHistory = () => {
