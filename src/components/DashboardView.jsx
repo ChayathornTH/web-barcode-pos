@@ -522,6 +522,40 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                   <span>Grand Total</span>
                   <span>฿{selectedReceipt.total.toFixed(2)}</span>
                 </div>
+
+                {selectedReceipt.paymentMethod && (
+                  <div style={{ 
+                    marginTop: '0.5rem', 
+                    padding: '0.4rem', 
+                    borderRadius: '4px', 
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.8rem',
+                    color: '#334155'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+                      <span>Payment Method</span>
+                      <span>{selectedReceipt.paymentMethod === 'cash' ? '💵 Cash' : '📱 PromptPay QR'}</span>
+                    </div>
+                    {selectedReceipt.paymentMethod === 'cash' && selectedReceipt.cashReceived !== null && (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', color: '#64748b' }}>
+                          <span>Cash Received</span>
+                          <span>฿{selectedReceipt.cashReceived.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f766e', fontWeight: 600 }}>
+                          <span>Change</span>
+                          <span>฿{selectedReceipt.changeAmount.toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
+                    {selectedReceipt.paymentMethod === 'qrpromptpay' && selectedReceipt.promptPayId && (
+                      <div style={{ fontSize: '0.7rem', color: '#64748b', textAlign: 'center', marginTop: '0.2rem' }}>
+                        Paid via PromptPay ID: {selectedReceipt.promptPayId}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div style={{ borderBottom: '1px dashed #cbd5e1', margin: '1rem 0' }}></div>
