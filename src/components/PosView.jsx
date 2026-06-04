@@ -429,8 +429,8 @@ export default function PosView({
                         textOverflow: 'ellipsis',
                         maxWidth: '100%',
                         cursor: 'help'
-                      }} title={`${product.setGroupName} Set (${formatTiersInfo(product)})`}>
-                        🏷️ {product.setGroupName} ({formatTiersInfo(product)})
+                      }} title={`${product.setGroupName} Set`}>
+                        🏷️ {product.setGroupName}
                       </div>
                     )}
 
@@ -497,6 +497,24 @@ export default function PosView({
                             <span style={{ marginLeft: '0.5rem', color: 'var(--primary)', fontWeight: 600 }}>🎨 {item.artist}</span>
                           )}
                         </div>
+                        {item.isSetPriced && (
+                          <div style={{
+                            fontSize: '0.7rem',
+                            color: 'var(--success)',
+                            fontWeight: 700,
+                            marginTop: '0.2rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            backgroundColor: 'rgba(16, 185, 129, 0.06)',
+                            border: '1px solid rgba(16, 185, 129, 0.15)',
+                            borderRadius: '4px',
+                            padding: '0.1rem 0.35rem',
+                            width: 'fit-content'
+                          }}>
+                            🏷️ Promo: {item.setGroupName} ({formatTiersInfo(item)})
+                          </div>
+                        )}
                       </div>
                     </div>
 

@@ -437,7 +437,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                         backgroundColor: 'rgba(16, 185, 129, 0.15)',
                         color: 'var(--success)',
                         border: '1px solid rgba(16, 185, 129, 0.3)'
-                      }}>🏷️ {product.setGroupName || "Set"} Tier</span>
+                      }}>🏷️ {product.setGroupName || "Set"}</span>
                     )}
                   </div>
                   <h4 style={styles.productName}>{product.name}</h4>
