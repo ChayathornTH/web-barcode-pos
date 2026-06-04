@@ -262,7 +262,73 @@ export default function PosView({
     if (a.category !== b.category) {
       return a.category.localeCompare(b.category);
     }
-    return a.name.localeCompare(b.name);
+  });
+
+  const renderCartItem = (item) => (
+    <div key={item.id} className="item-row cart-row">
+      <div style={styles.itemInfo}>
+        <span style={styles.itemEmoji}>{item.emoji}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={styles.itemName}>{item.name}</div>
+          <div style={styles.itemMeta}>
+            <span>฿{item.price.toFixed(2)} each</span>
+            {item.artist && (
+              <span style={{ marginLeft: '0.5rem', color: 'var(--primary)', fontWeight: 600 }}>🎨 {item.artist}</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="qty-actions-wrapper">
+        <div style={styles.qtyActions}>
+          <button 
+            style={styles.qtyBtn} 
+            onClick={() => onUpdateCartQty(item.id, item.quantity - 1)}
+          >
+            <Minus size={12} />
+          </button>
+          <span style={styles.qtyCount}>{item.quantity}</span>
+          <button 
+            style={styles.qtyBtn} 
+            onClick={() => onUpdateCartQty(item.id, item.quantity + 1)}
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+
+        <div className="item-subtotal" style={styles.itemSubtotal}>
+          ฿{(item.price * item.quantity).toFixed(2)}
+        </div>
+      </div>
+
+      <button 
+        style={styles.removeBtn} 
+        onClick={() => onRemoveFromCart(item.id)}
+        title="Remove product"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+
+  // Group cart items for rendering
+  const promoGroupsMap = {};
+  const regularItems = [];
+
+  cart.forEach(item => {
+    if (item.isSetPriced && item.setGroupName) {
+      const gName = item.setGroupName.trim();
+      if (!promoGroupsMap[gName]) {
+        promoGroupsMap[gName] = {
+          groupName: gName,
+          tiersInfo: formatTiersInfo(item),
+          items: []
+        };
+      }
+      promoGroupsMap[gName].items.push(item);
+    } else {
+      regularItems.push(item);
+    }
   });
 
   return (
@@ -485,70 +551,48 @@ export default function PosView({
               </div>
             ) : (
               <div style={styles.cartList}>
-                {cart.map((item) => (
-                  <div key={item.id} className="item-row cart-row">
-                    <div style={styles.itemInfo}>
-                      <span style={styles.itemEmoji}>{item.emoji}</span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={styles.itemName}>{item.name}</div>
-                        <div style={styles.itemMeta}>
-                          <span>฿{item.price.toFixed(2)} each</span>
-                          {item.artist && (
-                            <span style={{ marginLeft: '0.5rem', color: 'var(--primary)', fontWeight: 600 }}>🎨 {item.artist}</span>
-                          )}
-                        </div>
-                        {item.isSetPriced && (
-                          <div style={{
-                            fontSize: '0.7rem',
-                            color: 'var(--success)',
-                            fontWeight: 700,
-                            marginTop: '0.2rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            backgroundColor: 'rgba(16, 185, 129, 0.06)',
-                            border: '1px solid rgba(16, 185, 129, 0.15)',
-                            borderRadius: '4px',
-                            padding: '0.1rem 0.35rem',
-                            width: 'fit-content'
-                          }}>
-                            🏷️ Promo: {item.setGroupName} ({formatTiersInfo(item)})
-                          </div>
-                        )}
-                      </div>
+                {/* Render Promo Groups */}
+                {Object.values(promoGroupsMap).map((group) => (
+                  <div key={group.groupName} style={{ marginBottom: '1.25rem' }}>
+                    <div style={{
+                      fontSize: '0.85rem',
+                      fontWeight: '800',
+                      color: 'var(--success)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.1rem 0',
+                    }}>
+                      🏷️ Promo: {group.groupName} ({group.tiersInfo})
                     </div>
-
-                    <div className="qty-actions-wrapper">
-                      <div style={styles.qtyActions}>
-                        <button 
-                          style={styles.qtyBtn} 
-                          onClick={() => onUpdateCartQty(item.id, item.quantity - 1)}
-                        >
-                          <Minus size={12} />
-                        </button>
-                        <span style={styles.qtyCount}>{item.quantity}</span>
-                        <button 
-                          style={styles.qtyBtn} 
-                          onClick={() => onUpdateCartQty(item.id, item.quantity + 1)}
-                        >
-                          <Plus size={12} />
-                        </button>
-                      </div>
-
-                      <div className="item-subtotal" style={styles.itemSubtotal}>
-                        ฿{(item.price * item.quantity).toFixed(2)}
-                      </div>
+                    <hr style={{
+                      border: 'none',
+                      borderTop: '1px solid rgba(16, 185, 129, 0.25)',
+                      margin: '0.25rem 0 0.5rem 0'
+                    }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {group.items.map((item) => renderCartItem(item))}
                     </div>
-
-                    <button 
-                      style={styles.removeBtn} 
-                      onClick={() => onRemoveFromCart(item.id)}
-                      title="Remove product"
-                    >
-                      <Trash2 size={14} />
-                    </button>
                   </div>
                 ))}
+
+                {/* Render Regular Items */}
+                {regularItems.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {Object.keys(promoGroupsMap).length > 0 && (
+                      <div style={{
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        color: 'var(--text-muted)',
+                        marginTop: '0.5rem',
+                        marginBottom: '0.25rem'
+                      }}>
+                        Other Items
+                      </div>
+                    )}
+                    {regularItems.map((item) => renderCartItem(item))}
+                  </div>
+                )}
               </div>
             )}
 
