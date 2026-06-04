@@ -656,12 +656,7 @@ export default function PosView({
                 </div>
               )}
 
-              {cart.length > 0 && (
-                <div style={styles.codeTips}>
-                  <Sparkles size={12} color="var(--warning)" />
-                  <span>Try code: <strong>ARTFEST</strong> (20% off)</span>
-                </div>
-              )}
+
 
               <button 
                 className={`btn btn-primary pulse-primary ${cart.length === 0 ? 'disabled' : ''}`}
