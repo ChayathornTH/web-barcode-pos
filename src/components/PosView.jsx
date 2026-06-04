@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Sparkles, Plus, Minus, Trash2, Printer, CheckCircle, Grid } from 'lucide-react';
 
-const CATEGORIES = ['All', 'Paintings', 'Prints', 'Stickers', 'Accessories', 'Stationery'];
+const CATEGORIES = ['All', 'Stickers', 'Acrylics', 'Postcards', 'Books', 'Other'];
 
 const generateReceiptId = () => `REC-${Math.floor(100000 + Math.random() * 900000)}`;
 

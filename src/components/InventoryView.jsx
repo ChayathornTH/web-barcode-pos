@@ -3,11 +3,10 @@ import { Plus, Search, Trash2, Edit3, X, Barcode as BarcodeIcon, RotateCcw, Aler
 
 
 const CATEGORIES = [
-  "Paintings",
-  "Prints",
   "Stickers",
-  "Accessories",
-  "Stationery",
+  "Acrylics",
+  "Postcards",
+  "Books",
   "Other"
 ];
 
