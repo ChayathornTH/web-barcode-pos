@@ -745,7 +745,17 @@ export default function PosView({
       {/* Payment Selection & Cash Change Modal */}
       {isPaymentSelectionOpen && (
         <div style={styles.modalOverlay}>
-          <div className="glass-panel" style={{ ...styles.receiptContainer, maxWidth: '420px', padding: '1.5rem' }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '420px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            animation: 'slideIn 0.25s ease-out forwards',
+          }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
               <h3 style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 💳 Process Payment
@@ -924,7 +934,7 @@ export default function PosView({
                     </div>
                     
                     <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(generatePromptPayPayload(promptPayId, total))}`}
+                      src={`https://promptpay.io/${promptPayId.replace(/[^0-9]/g, '')}/${total.toFixed(2)}.png`}
                       alt="PromptPay QR Code"
                       style={{ width: '180px', height: '180px', display: 'block' }}
                     />
