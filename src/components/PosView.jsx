@@ -172,6 +172,7 @@ export default function PosView({
     setDiscounts,
     totalSetDiscount,
     subtotal,
+    tax,
     discountAmount,
     total
   } = useMemo(() => {
@@ -223,6 +224,7 @@ export default function PosView({
       setDiscounts: setDiscountsList,
       totalSetDiscount: totalSetDiscountVal,
       subtotal: subtotalVal,
+      tax: taxVal,
       discountAmount: discountAmt,
       total: totalVal
     };
