@@ -1,107 +1,132 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { DollarSign, FileText, ShoppingBag, TrendingUp, Calendar, ArrowUpRight, Eye, Printer, X, Download, Trash2 } from 'lucide-react';
 
 export default function DashboardView({ salesHistory, onResetSalesHistory }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
 
-  // Stats Calculations
-  const totalRevenue = salesHistory.reduce((sum, sale) => sum + sale.total, 0);
-  const totalTransactions = salesHistory.length;
-  const totalItemsSold = salesHistory.reduce((sum, sale) => 
-    sum + sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0
-  );
-  const averageTicket = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+  // Stats & Distribution Calculations wrapped in useMemo for performance
+  const stats = useMemo(() => {
+    // Stats Calculations
+    const totalRevenueVal = salesHistory.reduce((sum, sale) => sum + sale.total, 0);
+    const totalTransactionsVal = salesHistory.length;
+    const totalItemsSoldVal = salesHistory.reduce((sum, sale) => 
+      sum + sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0
+    );
+    const averageTicketVal = totalTransactionsVal > 0 ? totalRevenueVal / totalTransactionsVal : 0;
 
-  // Group Sales by Hour for hourly chart
-  const hourlyBuckets = Array.from({ length: 13 }, (_, i) => ({
-    hour: i + 9, // 9am to 9pm
-    label: `${i + 9 > 12 ? i + 9 - 12 : i + 9}${i + 9 >= 12 ? 'PM' : 'AM'}`,
-    amount: 0
-  }));
+    // Group Sales by Hour for hourly chart
+    const hourlyBucketsVal = Array.from({ length: 13 }, (_, i) => ({
+      hour: i + 9, // 9am to 9pm
+      label: `${i + 9 > 12 ? i + 9 - 12 : i + 9}${i + 9 >= 12 ? 'PM' : 'AM'}`,
+      amount: 0
+    }));
 
-  salesHistory.forEach(sale => {
-    let hour = 12;
-    try {
-      const timeStr = sale.timestamp.split(',')[1]?.trim();
-      if (timeStr) {
-        const parts = timeStr.split(':');
-        let hr = parseInt(parts[0]);
-        const isPM = timeStr.toLowerCase().includes('pm');
-        const isAM = timeStr.toLowerCase().includes('am');
-        if (isPM && hr < 12) hr += 12;
-        if (isAM && hr === 12) hr = 0;
-        hour = hr;
+    salesHistory.forEach(sale => {
+      let hour = 12;
+      try {
+        const timeStr = sale.timestamp.split(',')[1]?.trim();
+        if (timeStr) {
+          const parts = timeStr.split(':');
+          let hr = parseInt(parts[0]);
+          const isPM = timeStr.toLowerCase().includes('pm');
+          const isAM = timeStr.toLowerCase().includes('am');
+          if (isPM && hr < 12) hr += 12;
+          if (isAM && hr === 12) hr = 0;
+          hour = hr;
+        }
+      } catch {
+        hour = 12;
       }
-    } catch {
-      hour = 12;
-    }
-    
-    const bucket = hourlyBuckets.find(b => b.hour === hour);
-    if (bucket) {
-      bucket.amount += sale.total;
-    } else {
-      if (hour < 9) hourlyBuckets[0].amount += sale.total;
-      else hourlyBuckets[12].amount += sale.total;
-    }
-  });
-
-  const maxHourlySales = Math.max(...hourlyBuckets.map(b => b.amount), 50);
-
-  // Category Distribution
-  const categorySales = {};
-  salesHistory.forEach(sale => {
-    sale.items.forEach(item => {
-      categorySales[item.category] = (categorySales[item.category] || 0) + (item.price * item.quantity);
-    });
-  });
-
-  const totalCatSales = Object.values(categorySales).reduce((a, b) => a + b, 0) || 1;
-  const sortedCategories = Object.entries(categorySales)
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percent: (amount / totalCatSales) * 100
-    }))
-    .sort((a, b) => b.amount - a.amount);
-
-  // Artist Distribution (Proportional Net Share Split)
-  const artistSales = {};
-  salesHistory.forEach(sale => {
-    const subtotal = sale.subtotal || 1;
-    const total = sale.total;
-    
-    const receiptArtistTotals = {};
-    sale.items.forEach(item => {
-      const name = item.artist || 'Unknown';
-      if (!receiptArtistTotals[name]) {
-        receiptArtistTotals[name] = { subtotal: 0, quantity: 0 };
+      
+      const bucket = hourlyBucketsVal.find(b => b.hour === hour);
+      if (bucket) {
+        bucket.amount += sale.total;
+      } else {
+        if (hour < 9) hourlyBucketsVal[0].amount += sale.total;
+        else hourlyBucketsVal[12].amount += sale.total;
       }
-      receiptArtistTotals[name].subtotal += (item.price * item.quantity);
-      receiptArtistTotals[name].quantity += item.quantity;
     });
 
-    Object.keys(receiptArtistTotals).forEach(name => {
-      const stats = receiptArtistTotals[name];
-      if (!artistSales[name]) {
-        artistSales[name] = { gross: 0, net: 0, quantity: 0 };
-      }
-      artistSales[name].gross += stats.subtotal;
-      artistSales[name].quantity += stats.quantity;
-      const netShare = subtotal > 0 ? (stats.subtotal / subtotal) * total : 0;
-      artistSales[name].net += netShare;
-    });
-  });
+    const maxHourlySalesVal = Math.max(...hourlyBucketsVal.map(b => b.amount), 50);
 
-  const totalArtistNetSales = Object.values(artistSales).reduce((a, b) => a + b.net, 0) || 1;
-  const sortedArtists = Object.entries(artistSales)
-    .map(([artist, data]) => ({
-      artist,
-      gross: data.gross,
-      net: data.net,
-      quantity: data.quantity,
-      percent: (data.net / totalArtistNetSales) * 100
-    }))
-    .sort((a, b) => b.net - a.net);
+    // Category Distribution
+    const categorySales = {};
+    salesHistory.forEach(sale => {
+      sale.items.forEach(item => {
+        categorySales[item.category] = (categorySales[item.category] || 0) + (item.price * item.quantity);
+      });
+    });
+
+    const totalCatSales = Object.values(categorySales).reduce((a, b) => a + b, 0) || 1;
+    const sortedCategoriesVal = Object.entries(categorySales)
+      .map(([category, amount]) => ({
+        category,
+        amount,
+        percent: (amount / totalCatSales) * 100
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    // Artist Distribution (Proportional Net Share Split)
+    const artistSales = {};
+    salesHistory.forEach(sale => {
+      const subtotal = sale.subtotal || 1;
+      const total = sale.total;
+      
+      const receiptArtistTotals = {};
+      sale.items.forEach(item => {
+        const name = item.artist || 'Unknown';
+        if (!receiptArtistTotals[name]) {
+          receiptArtistTotals[name] = { subtotal: 0, quantity: 0 };
+        }
+        receiptArtistTotals[name].subtotal += (item.price * item.quantity);
+        receiptArtistTotals[name].quantity += item.quantity;
+      });
+
+      Object.keys(receiptArtistTotals).forEach(name => {
+        const stats = receiptArtistTotals[name];
+        if (!artistSales[name]) {
+          artistSales[name] = { gross: 0, net: 0, quantity: 0 };
+        }
+        artistSales[name].gross += stats.subtotal;
+        artistSales[name].quantity += stats.quantity;
+        const netShare = subtotal > 0 ? (stats.subtotal / subtotal) * total : 0;
+        artistSales[name].net += netShare;
+      });
+    });
+
+    const totalArtistNetSales = Object.values(artistSales).reduce((a, b) => a + b.net, 0) || 1;
+    const sortedArtistsVal = Object.entries(artistSales)
+      .map(([artist, data]) => ({
+        artist,
+        gross: data.gross,
+        net: data.net,
+        quantity: data.quantity,
+        percent: (data.net / totalArtistNetSales) * 100
+      }))
+      .sort((a, b) => b.net - a.net);
+
+    return {
+      totalRevenue: totalRevenueVal,
+      totalTransactions: totalTransactionsVal,
+      totalItemsSold: totalItemsSoldVal,
+      averageTicket: averageTicketVal,
+      hourlyBuckets: hourlyBucketsVal,
+      maxHourlySales: maxHourlySalesVal,
+      sortedCategories: sortedCategoriesVal,
+      sortedArtists: sortedArtistsVal
+    };
+  }, [salesHistory]);
+
+  const {
+    totalRevenue,
+    totalTransactions,
+    totalItemsSold,
+    averageTicket,
+    hourlyBuckets,
+    maxHourlySales,
+    sortedCategories,
+    sortedArtists
+  } = stats;
 
   // Export ledger list to CSV format
   const handleExportCSV = () => {
@@ -148,16 +173,16 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       });
     });
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(e => e.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
-      
-    const encodedUri = encodeURI(csvContent);
+    const csvString = [headers.join(","), ...rows.map(e => e.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", `artfest_sales_ledger_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -201,8 +226,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
           </div>
           <div style={styles.statValue}>฿{totalRevenue.toFixed(2)}</div>
           <div style={styles.statTrend}>
-            <TrendingUp size={14} color="var(--success)" />
-            <span style={{ color: 'var(--success)', fontWeight: 600 }}>+12.4%</span> vs yesterday
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Gross sales ledger</span>
           </div>
         </div>
 

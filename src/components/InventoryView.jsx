@@ -367,6 +367,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleDownloadTemplate = () => {
@@ -385,6 +386,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Handle Edit click

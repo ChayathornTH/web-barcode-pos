@@ -1,45 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Sparkles, Plus, Minus, Trash2, Printer, CheckCircle, Grid } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Plus, Minus, Trash2, Printer, CheckCircle, Grid } from 'lucide-react';
 
 const CATEGORIES = ['All', 'Stickers', 'Acrylics', 'Postcards', 'Books', 'Other'];
 
 const generateReceiptId = () => `REC-${Math.floor(100000 + Math.random() * 900000)}`;
 
-const generatePromptPayPayload = (targetId, amount) => {
-  const cleanId = targetId.replace(/[^0-9]/g, '');
-  let formattedTarget = '';
-  if (cleanId.length === 10) {
-    formattedTarget = '0066' + cleanId.slice(1);
-  } else {
-    formattedTarget = cleanId;
-  }
-  const targetLengthStr = String(formattedTarget.length).padStart(2, '0');
-  const aidStr = '0010A000000677010111';
-  const phoneOrTaxStr = `01${targetLengthStr}${formattedTarget}`;
-  const merchantInfoValue = `${aidStr}${phoneOrTaxStr}`;
-  const merchantInfoLengthStr = String(merchantInfoValue.length).padStart(2, '0');
-  const merchantInfo = `29${merchantInfoLengthStr}${merchantInfoValue}`;
 
-  const countryCode = '5802TH';
-  const currencyCode = '5303764';
-
-  let amountStr = '';
-  if (amount !== undefined && amount > 0) {
-    const amtFormatted = parseFloat(amount).toFixed(2);
-    amountStr = `54${String(amtFormatted.length).padStart(2, '0')}${amtFormatted}`;
-  }
-
-  const basePayload = `000201010212${merchantInfo}${currencyCode}${amountStr}${countryCode}6304`;
-
-  let crc = 0xFFFF;
-  for (let i = 0; i < basePayload.length; i++) {
-    let x = ((crc >> 8) ^ basePayload.charCodeAt(i)) & 0xFF;
-    x ^= x >> 4;
-    crc = ((crc << 8) ^ (x << 12) ^ (x << 5) ^ x) & 0xFFFF;
-  }
-  const crcHex = crc.toString(16).toUpperCase().padStart(4, '0');
-  return basePayload + crcHex;
-};
 
 export default function PosView({ 
   products,
@@ -201,51 +167,66 @@ export default function PosView({
     return dp[qty];
   };
 
-  // Group cart items by set group
-  const setGroups = {};
-  cart.forEach(item => {
-    if (item.isSetPriced) {
-      const groupKey = item.setGroupName ? item.setGroupName.trim() : `single-${item.id}`;
-      if (!setGroups[groupKey]) {
-        setGroups[groupKey] = {
-          items: [],
-          tiers: item.setTiers || []
-        };
+  // Group cart items and calculate discounts
+  const {
+    setDiscounts,
+    totalSetDiscount,
+    subtotal,
+    discountAmount,
+    total
+  } = useMemo(() => {
+    // Group cart items by set group
+    const setGroups = {};
+    cart.forEach(item => {
+      if (item.isSetPriced) {
+        const groupKey = item.setGroupName ? item.setGroupName.trim() : `single-${item.id}`;
+        if (!setGroups[groupKey]) {
+          setGroups[groupKey] = {
+            items: [],
+            tiers: item.setTiers || []
+          };
+        }
+        setGroups[groupKey].items.push(item);
       }
-      setGroups[groupKey].items.push(item);
+    });
+
+    const setDiscountsList = [];
+    Object.keys(setGroups).forEach(groupKey => {
+      const group = setGroups[groupKey];
+      const totalQty = group.items.reduce((sum, i) => sum + i.quantity, 0);
+      const basePrice = group.items[0]?.price || 10.00;
+      const discount = calculateOptimalGroupDiscount(totalQty, group.tiers, basePrice);
+      if (discount > 0) {
+        setDiscountsList.push({
+          groupName: groupKey.startsWith('single-') ? group.items[0].name : `${groupKey} Set`,
+          amount: discount
+        });
+      }
+    });
+
+    const totalSetDiscountVal = setDiscountsList.reduce((sum, d) => sum + d.amount, 0);
+    const subtotalVal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const taxVal = 0; // VAT removed
+    
+    let discountAmt = 0;
+    const remainingSubtotalVal = Math.max(0, subtotalVal - totalSetDiscountVal);
+    
+    if (appliedDiscount.percent === 'flat-5') {
+      discountAmt = remainingSubtotalVal > 0 ? 5.00 : 0;
+    } else {
+      discountAmt = remainingSubtotalVal * ((parseFloat(appliedDiscount.percent) || 0) / 100);
     }
-  });
+    
+    const totalVal = Math.max(0, remainingSubtotalVal + taxVal - discountAmt);
 
-  const setDiscounts = [];
-  Object.keys(setGroups).forEach(groupKey => {
-    const group = setGroups[groupKey];
-    const totalQty = group.items.reduce((sum, i) => sum + i.quantity, 0);
-    const basePrice = group.items[0]?.price || 10.00;
-    const discount = calculateOptimalGroupDiscount(totalQty, group.tiers, basePrice);
-    if (discount > 0) {
-      setDiscounts.push({
-        groupName: groupKey.startsWith('single-') ? group.items[0].name : `${groupKey} Set`,
-        amount: discount
-      });
-    }
-  });
-
-  const totalSetDiscount = setDiscounts.reduce((sum, d) => sum + d.amount, 0);
-
-  // Calculations
-  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const tax = 0; // VAT removed
-  
-  let discountAmount = 0;
-  const remainingSubtotal = Math.max(0, subtotal - totalSetDiscount);
-  
-  if (appliedDiscount.percent === 'flat-5') {
-    discountAmount = remainingSubtotal > 0 ? 5.00 : 0;
-  } else {
-    discountAmount = remainingSubtotal * (appliedDiscount.percent / 100);
-  }
-  
-  const total = Math.max(0, remainingSubtotal + tax - discountAmount);
+    return {
+      setDiscounts: setDiscountsList,
+      totalSetDiscount: totalSetDiscountVal,
+      subtotal: subtotalVal,
+      discountAmount: discountAmt,
+      total: totalVal
+    };
+  }, [cart, appliedDiscount]);
 
   // Checkout process simulation
   const handleCheckoutClick = () => {
@@ -302,36 +283,40 @@ export default function PosView({
     setReceiptData(null);
   };
 
-  const uniqueArtists = Array.from(new Set(products.map(p => p.artist || 'Unknown').filter(Boolean))).sort();
+  const uniqueArtists = useMemo(() => {
+    return Array.from(new Set(products.map(p => p.artist || 'Unknown').filter(Boolean))).sort();
+  }, [products]);
 
   // Filter and sort catalog products so items in the same group are next to each other
-  const filteredCatalogProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || 
-                          p.artist?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-                          p.description?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-                          p.barcode.includes(catalogSearch);
-    const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-    const matchesArtist = selectedArtist === 'All' || (p.artist || 'Unknown') === selectedArtist;
-    return matchesSearch && matchesCategory && matchesArtist;
-  }).sort((a, b) => {
-    const aGroup = (a.isSetPriced && a.setGroupName) ? a.setGroupName.trim().toLowerCase() : '';
-    const bGroup = (b.isSetPriced && b.setGroupName) ? b.setGroupName.trim().toLowerCase() : '';
-    
-    if (aGroup && bGroup) {
-      if (aGroup !== bGroup) {
-        return aGroup.localeCompare(bGroup);
+  const filteredCatalogProducts = useMemo(() => {
+    return products.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || 
+                            p.artist?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                            p.description?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                            p.barcode.includes(catalogSearch);
+      const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
+      const matchesArtist = selectedArtist === 'All' || (p.artist || 'Unknown') === selectedArtist;
+      return matchesSearch && matchesCategory && matchesArtist;
+    }).sort((a, b) => {
+      const aGroup = (a.isSetPriced && a.setGroupName) ? a.setGroupName.trim().toLowerCase() : '';
+      const bGroup = (b.isSetPriced && b.setGroupName) ? b.setGroupName.trim().toLowerCase() : '';
+      
+      if (aGroup && bGroup) {
+        if (aGroup !== bGroup) {
+          return aGroup.localeCompare(bGroup);
+        }
+        return a.name.localeCompare(b.name);
+      }
+      if (aGroup) return -1;
+      if (bGroup) return 1;
+      
+      // Sort ungrouped items by category then name
+      if (a.category !== b.category) {
+        return a.category.localeCompare(b.category);
       }
       return a.name.localeCompare(b.name);
-    }
-    if (aGroup) return -1;
-    if (bGroup) return 1;
-    
-    // Sort ungrouped items by category then name
-    if (a.category !== b.category) {
-      return a.category.localeCompare(b.category);
-    }
-    return a.name.localeCompare(b.name);
-  });
+    });
+  }, [products, catalogSearch, selectedCategory, selectedArtist]);
 
   const renderCartItem = (item) => (
     <div key={item.id} className="item-row cart-row">
