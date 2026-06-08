@@ -119,7 +119,10 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       "Sticker Discount (฿)",
       "Coupon Code", 
       "Coupon Discount (฿)", 
-      "Invoice Grand Total (฿)"
+      "Invoice Grand Total (฿)",
+      "Payment Method",
+      "Cash Received (฿)",
+      "Change (฿)"
     ];
     
     const rows = [];
@@ -137,7 +140,10 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
           index === 0 ? (sale.stickerDiscount || 0).toFixed(2) : "0.00",
           sale.discount.code || "None",
           index === 0 ? (sale.discount.amount || 0).toFixed(2) : "0.00",
-          index === 0 ? sale.total.toFixed(2) : ""
+          index === 0 ? sale.total.toFixed(2) : "",
+          index === 0 ? (sale.paymentMethod || "Unknown") : "",
+          index === 0 ? (sale.cashReceived !== null && sale.cashReceived !== undefined ? sale.cashReceived.toFixed(2) : "") : "",
+          index === 0 ? (sale.changeAmount !== null && sale.changeAmount !== undefined ? sale.changeAmount.toFixed(2) : "") : ""
         ]);
       });
     });
@@ -485,70 +491,70 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
 
               <div style={{ borderBottom: '1px dashed #cbd5e1', margin: '0.75rem 0' }}></div>
 
-              <div style={styles.receiptTotals}>
-                <div style={styles.receiptTotalRow}>
-                  <span>Subtotal</span>
-                  <span>฿{selectedReceipt.subtotal.toFixed(2)}</span>
-                </div>
-                {selectedReceipt.tax > 0 && (
+                <div style={styles.receiptTotals}>
                   <div style={styles.receiptTotalRow}>
-                    <span>Tax (7%)</span>
-                    <span>฿{selectedReceipt.tax.toFixed(2)}</span>
+                    <span>Subtotal</span>
+                    <span>฿{(selectedReceipt.subtotal || 0).toFixed(2)}</span>
                   </div>
-                )}
-                {selectedReceipt.setDiscounts ? (
-                  selectedReceipt.setDiscounts.map((disc, idx) => (
-                    <div key={idx} style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
-                      <span>{disc.groupName} Discount</span>
-                      <span>-฿{disc.amount.toFixed(2)}</span>
+                  {selectedReceipt.tax > 0 && (
+                    <div style={styles.receiptTotalRow}>
+                      <span>Tax (7%)</span>
+                      <span>฿{(selectedReceipt.tax || 0).toFixed(2)}</span>
                     </div>
-                  ))
-                ) : (
-                  selectedReceipt.stickerDiscount > 0 && (
+                  )}
+                  {selectedReceipt.setDiscounts ? (
+                    selectedReceipt.setDiscounts.map((disc, idx) => (
+                      <div key={idx} style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
+                        <span>{disc.groupName} Discount</span>
+                        <span>-฿{(disc.amount || 0).toFixed(2)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    selectedReceipt.stickerDiscount > 0 && (
+                      <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
+                        <span>Sticker Set Discount</span>
+                        <span>-฿{(selectedReceipt.stickerDiscount || 0).toFixed(2)}</span>
+                      </div>
+                    )
+                  )}
+                  {selectedReceipt.discount?.amount > 0 && (
                     <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
-                      <span>Sticker Set Discount</span>
-                      <span>-฿{selectedReceipt.stickerDiscount.toFixed(2)}</span>
+                      <span>Discount ({selectedReceipt.discount?.code})</span>
+                      <span>-฿{(selectedReceipt.discount?.amount || 0).toFixed(2)}</span>
                     </div>
-                  )
-                )}
-                {selectedReceipt.discount.amount > 0 && (
-                  <div style={{ ...styles.receiptTotalRow, color: '#0f766e' }}>
-                    <span>Discount ({selectedReceipt.discount.code})</span>
-                    <span>-฿{selectedReceipt.discount.amount.toFixed(2)}</span>
+                  )}
+                  <div style={{ borderBottom: '1px solid #000', margin: '0.4rem 0' }}></div>
+                  <div style={{ ...styles.receiptTotalRow, fontSize: '1.2rem', fontWeight: 800 }}>
+                    <span>Grand Total</span>
+                    <span>฿{(selectedReceipt.total || 0).toFixed(2)}</span>
                   </div>
-                )}
-                <div style={{ borderBottom: '1px solid #000', margin: '0.4rem 0' }}></div>
-                <div style={{ ...styles.receiptTotalRow, fontSize: '1.2rem', fontWeight: 800 }}>
-                  <span>Grand Total</span>
-                  <span>฿{selectedReceipt.total.toFixed(2)}</span>
-                </div>
 
-                {selectedReceipt.paymentMethod && (
-                  <div style={{ 
-                    marginTop: '0.5rem', 
-                    padding: '0.4rem', 
-                    borderRadius: '4px', 
-                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.8rem',
-                    color: '#334155'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                      <span>Payment Method</span>
-                      <span>{selectedReceipt.paymentMethod === 'cash' ? '💵 Cash' : '📱 PromptPay QR'}</span>
-                    </div>
-                    {selectedReceipt.paymentMethod === 'cash' && selectedReceipt.cashReceived !== null && (
-                      <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', color: '#64748b' }}>
-                          <span>Cash Received</span>
-                          <span>฿{selectedReceipt.cashReceived.toFixed(2)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f766e', fontWeight: 600 }}>
-                          <span>Change</span>
-                          <span>฿{selectedReceipt.changeAmount.toFixed(2)}</span>
-                        </div>
-                      </>
-                    )}
+                  {selectedReceipt.paymentMethod && (
+                    <div style={{ 
+                      marginTop: '0.5rem', 
+                      padding: '0.4rem', 
+                      borderRadius: '4px', 
+                      backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '0.8rem',
+                      color: '#334155'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+                        <span>Payment Method</span>
+                        <span>{selectedReceipt.paymentMethod === 'cash' ? '💵 Cash' : '📱 PromptPay QR'}</span>
+                      </div>
+                      {selectedReceipt.paymentMethod === 'cash' && selectedReceipt.cashReceived !== null && selectedReceipt.cashReceived !== undefined && (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', color: '#64748b' }}>
+                            <span>Cash Received</span>
+                            <span>฿{(selectedReceipt.cashReceived || 0).toFixed(2)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0f766e', fontWeight: 600 }}>
+                            <span>Change</span>
+                            <span>฿{(selectedReceipt.changeAmount || 0).toFixed(2)}</span>
+                          </div>
+                        </>
+                      )}
                     {selectedReceipt.paymentMethod === 'qrpromptpay' && selectedReceipt.promptPayId && (
                       <div style={{ fontSize: '0.7rem', color: '#64748b', textAlign: 'center', marginTop: '0.2rem' }}>
                         Paid via PromptPay ID: {selectedReceipt.promptPayId}

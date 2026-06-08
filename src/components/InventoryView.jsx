@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Search, Trash2, Edit3, X, Barcode as BarcodeIcon, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, X, Barcode as BarcodeIcon, RotateCcw, AlertTriangle, Copy, Upload, Download, FileSpreadsheet, Clipboard, CheckCircle2 } from 'lucide-react';
 
 
 const CATEGORIES = [
@@ -9,6 +9,16 @@ const CATEGORIES = [
   "Books",
   "Other"
 ];
+
+const normalizeCategoryName = (cat) => {
+  if (!cat) return 'Other';
+  const c = cat.trim().toLowerCase();
+  if (c === 'paintings' || c === 'painting' || c === 'acrylics' || c === 'acrylic' || c === 'art') return 'Acrylics';
+  if (c === 'prints' || c === 'print' || c === 'postcards' || c === 'postcard') return 'Postcards';
+  if (c === 'stickers' || c === 'sticker') return 'Stickers';
+  if (c === 'books' || c === 'book' || c === 'stationery') return 'Books';
+  return 'Other';
+};
 
 // Helper to match emojis based on product characteristics
 const getEmojiForProduct = (name, category) => {
@@ -25,20 +35,39 @@ const getEmojiForProduct = (name, category) => {
 
   // Fallbacks by category
   switch (category) {
-    case "Paintings": return '🎨';
-    case "Prints": return '🖼️';
-    case "Stickers": return '✨';
-    case "Accessories": return '🔑';
-    case "Stationery": return '📓';
-    default: return '📦';
+    case "Acrylics":
+    case "Paintings":
+      return '🎨';
+    case "Postcards":
+    case "Prints":
+      return '🖼️';
+    case "Stickers":
+      return '✨';
+    case "Books":
+    case "Stationery":
+      return '📓';
+    case "Other":
+    case "Accessories":
+      return '📦';
+    default:
+      return '📦';
   }
 };
 
-export default function InventoryView({ products, onAddProduct, onUpdateProduct, onDeleteProduct, onSimulateScan, onResetInventory }) {
+export default function InventoryView({ products, onAddProduct, onUpdateProduct, onDeleteProduct, onSimulateScan, onResetInventory, onImportProducts }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+
+  // Bulk Catalog Tool States
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkTab, setBulkTab] = useState('import_file');
+  const [pasteText, setPasteText] = useState('');
+  const [parsedProducts, setParsedProducts] = useState([]);
+  const [parseErrors, setParseErrors] = useState([]);
+  const [importMode, setImportMode] = useState('merge');
+  const [dragActive, setDragActive] = useState(false);
 
   // Get all unique existing set groups and their tiers from the product list
   const availableGroups = {};
@@ -74,8 +103,293 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   const [tier3Price, setTier3Price] = useState('');
   const [formError, setFormError] = useState('');
 
+  const handleDuplicateClick = (product) => {
+    setEditingProduct(null); // Create a new product when saving
+    
+    // Auto generate standard-looking EAN-13 mock barcode
+    const random12Digits = Array.from({length: 12}, () => Math.floor(Math.random() * 10)).join('');
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      sum += parseInt(random12Digits[i]) * (i % 2 === 0 ? 1 : 3);
+    }
+    const checksum = (10 - (sum % 10)) % 10;
+    setBarcode(random12Digits + checksum);
+
+    setName(`${product.name} (Copy)`);
+    setArtist(product.artist || '');
+    setPrice(product.price.toString());
+    setCategory(product.category);
+    setStock(product.stock.toString());
+    setDescription(product.description || '');
+    setImage(product.image || '');
+    setIsSetPriced(!!product.isSetPriced);
+    
+    const gName = product.setGroupName || '';
+    setSetGroupName(gName);
+    if (gName && groupNames.includes(gName)) {
+      setGroupSelectValue(gName);
+    } else if (gName) {
+      setGroupSelectValue('__new__');
+    } else {
+      setGroupSelectValue('');
+    }
+    
+    const tiers = product.setTiers || [];
+    const getPriceVal = (t) => {
+      if (!t) return '';
+      if (t.price !== undefined) return t.price.toString();
+      if (t.discount !== undefined) return Math.max(0, product.price * t.quantity - t.discount).toString();
+      return '';
+    };
+    setTier1Qty(tiers[0]?.quantity?.toString() || '1');
+    setTier1Price(getPriceVal(tiers[0]) || product.price.toString());
+    setTier2Qty(tiers[1]?.quantity?.toString() || '');
+    setTier2Price(getPriceVal(tiers[1]));
+    setTier3Qty(tiers[2]?.quantity?.toString() || '');
+    setTier3Price(getPriceVal(tiers[2]));
+    
+    setFormError('');
+    setIsModalOpen(true);
+  };
+
+  const handleParseText = (text) => {
+    if (!text.trim()) {
+      setParsedProducts([]);
+      setParseErrors(['Input text is empty.']);
+      return;
+    }
+
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      setParsedProducts([]);
+      setParseErrors(['No data rows found.']);
+      return;
+    }
+
+    // Detect delimiter
+    const headerLine = lines[0];
+    let delimiter = ',';
+    if (headerLine.includes('\t')) {
+      delimiter = '\t';
+    } else if (headerLine.includes(',')) {
+      delimiter = ',';
+    } else {
+      delimiter = '\t';
+    }
+
+    const splitLine = (line, delim) => {
+      if (delim === '\t') {
+        return line.split('\t').map(val => val.trim().replace(/^["']|["']$/g, ''));
+      }
+      const result = [];
+      let current = '';
+      let insideQuote = false;
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"') {
+          insideQuote = !insideQuote;
+        } else if (char === ',' && !insideQuote) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result.map(val => val.trim().replace(/^["']|["']$/g, ''));
+    };
+
+    const rawHeaders = splitLine(headerLine, delimiter);
+    const headers = rawHeaders.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+    const nameIndex = headers.indexOf('name');
+    const priceIndex = headers.indexOf('price');
+
+    if (nameIndex === -1 || priceIndex === -1) {
+      setParsedProducts([]);
+      setParseErrors([
+        `Could not find required columns 'Name' and 'Price'. Detected headers: [${rawHeaders.join(', ')}].`,
+        `Make sure your first row contains the column headers (e.g. Name, Price, Barcode, Stock, Category, Artist).`
+      ]);
+      return;
+    }
+
+    const tempProducts = [];
+    const tempErrors = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const rowVals = splitLine(lines[i], delimiter);
+      if (rowVals.length === 0 || (rowVals.length === 1 && !rowVals[0])) continue;
+
+      const p = {};
+      headers.forEach((header, idx) => {
+        let val = rowVals[idx] || '';
+
+        if (header === 'barcode') p.barcode = val;
+        else if (header === 'name') p.name = val;
+        else if (header === 'price') p.price = parseFloat(val);
+        else if (header === 'category') p.category = normalizeCategoryName(val);
+        else if (header === 'stock') p.stock = parseInt(val);
+        else if (header === 'artist' || header === 'owner') p.artist = val;
+        else if (header === 'emoji') p.emoji = val;
+        else if (header === 'image') p.image = val;
+        else if (header === 'description') p.description = val;
+        else if (header === 'issetpriced') p.isSetPriced = val.toLowerCase() === 'true';
+        else if (header === 'setgroupname') p.setGroupName = val;
+      });
+
+      const rowNum = i + 1;
+      if (!p.name) {
+        tempErrors.push(`Row ${rowNum}: Product name is missing.`);
+        continue;
+      }
+
+      if (isNaN(p.price) || p.price < 0) {
+        tempErrors.push(`Row ${rowNum} ("${p.name}"): Price is invalid or negative.`);
+        continue;
+      }
+
+      if (isNaN(p.stock) || p.stock < 0) {
+        p.stock = 0;
+      }
+
+      if (!p.barcode) {
+        const random12Digits = Array.from({length: 12}, () => Math.floor(Math.random() * 10)).join('');
+        let sum = 0;
+        for (let k = 0; k < 12; k++) {
+          sum += parseInt(random12Digits[k]) * (k % 2 === 0 ? 1 : 3);
+        }
+        const checksum = (10 - (sum % 10)) % 10;
+        p.barcode = random12Digits + checksum;
+      }
+
+      if (!p.category) p.category = 'Other';
+      if (!p.artist) p.artist = 'Unknown';
+      if (!p.emoji) p.emoji = getEmojiForProduct(p.name, p.category);
+
+      if (p.isSetPriced) {
+        p.setTiers = [
+          { quantity: 1, price: p.price, discount: 0 },
+          { quantity: 3, price: p.price * 2.5, discount: Math.max(0, p.price * 3 - (p.price * 2.5)) },
+          { quantity: 5, price: p.price * 4.0, discount: Math.max(0, p.price * 5 - (p.price * 4.0)) }
+        ];
+      }
+
+      p.id = `prod-${p.barcode}-${Date.now() + i}`;
+      tempProducts.push(p);
+    }
+
+    setParsedProducts(tempProducts);
+    setParseErrors(tempErrors);
+  };
+
+  const handleCSVFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        handleParseText(text);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        handleParseText(text);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (parsedProducts.length === 0) return;
+    
+    if (importMode === 'overwrite') {
+      if (!window.confirm("WARNING: Overwrite Mode will delete ALL current products in this catalog before importing. Are you sure you want to proceed?")) {
+        return;
+      }
+    }
+    
+    if (onImportProducts) {
+      const success = await onImportProducts(parsedProducts, importMode === 'overwrite');
+      if (success) {
+        setIsBulkModalOpen(false);
+        setParsedProducts([]);
+        setParseErrors([]);
+        setPasteText('');
+      }
+    }
+  };
+
+  const handleExportCSV = () => {
+    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName"];
+    const rows = products.map(p => {
+      return [
+        p.barcode || '',
+        `"${(p.name || '').replace(/"/g, '""')}"`,
+        p.price,
+        p.category || 'Other',
+        p.stock || 0,
+        `"${(p.artist || 'Unknown').replace(/"/g, '""')}"`,
+        p.emoji || '📦',
+        p.image || '',
+        `"${(p.description || '').replace(/"/g, '""')}"`,
+        p.isSetPriced ? 'TRUE' : 'FALSE',
+        p.setGroupName || ''
+      ].join(',');
+    });
+    
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `products_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName"];
+    const sampleRows = [
+      ["8850125000114", "Cozy Coffee Shop Print", "15.00", "Prints", "25", "Bob", "☕", "", "Warm-toned illustration print", "FALSE", ""],
+      ["3001", "Holographic Sticker Pack", "12.00", "Stickers", "50", "Charlie", "✨", "", "Waterproof die-cut stickers", "TRUE", "Stickers"]
+    ].map(row => row.join(','));
+    
+    const csvContent = [headers.join(','), ...sampleRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "products_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Handle Edit click
   const handleEditClick = (product) => {
+    setFormError('');
     setEditingProduct(product);
     setBarcode(product.barcode);
     setName(product.name);
@@ -208,8 +522,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     const priceNum = parseFloat(price);
     const stockNum = parseInt(stock);
 
-    if (isNaN(priceNum) || priceNum <= 0) {
-      setFormError("Price must be a valid number greater than 0.");
+    if (isNaN(priceNum) || priceNum < 0) {
+      setFormError("Price must be a valid number greater than or equal to 0.");
       return;
     }
     if (isNaN(stockNum) || stockNum < 0) {
@@ -331,6 +645,9 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button className="btn btn-secondary" onClick={onResetInventory} title="Reset database to default items">
             <RotateCcw size={16} /> Reset Default
+          </button>
+          <button className="btn btn-secondary" onClick={() => setIsBulkModalOpen(true)} title="Bulk Import / Export Products">
+            <FileSpreadsheet size={16} /> Bulk Tools
           </button>
           <button className="btn btn-primary" onClick={handleAddClick}>
             <Plus size={16} /> Add Product
@@ -478,6 +795,14 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
                   <button 
                     className="btn btn-secondary" 
+                    onClick={() => handleDuplicateClick(product)}
+                    style={styles.actionBtn}
+                    title="Duplicate Product (Clone)"
+                  >
+                    <Copy size={14} />
+                  </button>
+                  <button 
+                    className="btn btn-secondary" 
                     onClick={() => handleEditClick(product)}
                     style={styles.actionBtn}
                     title="Edit Product"
@@ -486,7 +811,11 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                   </button>
                   <button 
                     className="btn btn-danger" 
-                    onClick={() => onDeleteProduct(product.id)}
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to delete "${product.name}"?`)) {
+                        onDeleteProduct(product.id);
+                      }
+                    }}
                     style={styles.actionBtn}
                     title="Delete Product"
                   >
@@ -786,6 +1115,315 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal dialog for Bulk Tools */}
+      {isBulkModalOpen && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel" style={{ ...styles.modalContainer, maxWidth: '640px' }}>
+            <div style={styles.modalHeader}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileSpreadsheet size={20} color="var(--primary)" />
+                <span>Bulk Catalog Tools</span>
+              </h3>
+              <button style={styles.closeBtn} onClick={() => {
+                setIsBulkModalOpen(false);
+                setParsedProducts([]);
+                setParseErrors([]);
+                setPasteText('');
+              }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div style={{
+              display: 'flex',
+              borderBottom: '1px solid var(--border-color)',
+              backgroundColor: 'rgba(0,0,0,0.1)'
+            }}>
+              <button 
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  border: 'none',
+                  background: bulkTab === 'import_file' ? 'var(--bg-secondary)' : 'transparent',
+                  color: bulkTab === 'import_file' ? 'var(--primary)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  borderBottom: bulkTab === 'import_file' ? '2px solid var(--primary)' : 'none',
+                  transition: 'all 0.2s'
+                }}
+                onClick={() => { setBulkTab('import_file'); setParsedProducts([]); setParseErrors([]); }}
+              >
+                <Upload size={14} style={{ marginRight: '0.35rem', verticalAlign: 'middle' }} />
+                Import File (.csv)
+              </button>
+              <button 
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  border: 'none',
+                  background: bulkTab === 'paste' ? 'var(--bg-secondary)' : 'transparent',
+                  color: bulkTab === 'paste' ? 'var(--primary)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  borderBottom: bulkTab === 'paste' ? '2px solid var(--primary)' : 'none',
+                  transition: 'all 0.2s'
+                }}
+                onClick={() => { setBulkTab('paste'); setParsedProducts([]); setParseErrors([]); }}
+              >
+                <Clipboard size={14} style={{ marginRight: '0.35rem', verticalAlign: 'middle' }} />
+                Copy-Paste Sheets
+              </button>
+              <button 
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  border: 'none',
+                  background: bulkTab === 'export' ? 'var(--bg-secondary)' : 'transparent',
+                  color: bulkTab === 'export' ? 'var(--primary)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  borderBottom: bulkTab === 'export' ? '2px solid var(--primary)' : 'none',
+                  transition: 'all 0.2s'
+                }}
+                onClick={() => { setBulkTab('export'); setParsedProducts([]); setParseErrors([]); }}
+              >
+                <Download size={14} style={{ marginRight: '0.35rem', verticalAlign: 'middle' }} />
+                Export Catalog
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {bulkTab === 'import_file' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    Upload or drag-and-drop a spreadsheet <code>.csv</code> file.
+                  </p>
+                  
+                  <div 
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    style={{
+                      border: `2px dashed ${dragActive ? 'var(--primary)' : 'var(--border-color)'}`,
+                      borderRadius: '8px',
+                      padding: '2.5rem 1.5rem',
+                      textAlign: 'center',
+                      backgroundColor: dragActive ? 'rgba(139, 92, 246, 0.04)' : 'rgba(255, 255, 255, 0.01)',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                    onClick={() => document.getElementById('bulk-csv-upload-input').click()}
+                  >
+                    <Upload size={32} color={dragActive ? 'var(--primary)' : 'var(--text-secondary)'} style={{ marginBottom: '0.75rem' }} />
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                      {dragActive ? "Drop the file here!" : "Drag & Drop your CSV file"}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      or click to browse from computer
+                    </div>
+                    <input 
+                      type="file" 
+                      id="bulk-csv-upload-input" 
+                      accept=".csv"
+                      onChange={handleCSVFileChange}
+                      style={{ display: 'none' }}
+                    />
+                  </div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }} 
+                      onClick={handleDownloadTemplate}
+                    >
+                      <Download size={12} /> Download CSV Template
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {bulkTab === 'paste' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    Copy cells from Excel or Google Sheets and paste them below. The first row <b>must</b> contain column headers (e.g. <code>Name</code>, <code>Price</code>, <code>Barcode</code>, <code>Stock</code>, <code>Artist</code>).
+                  </p>
+                  <textarea 
+                    className="custom-input"
+                    rows="6"
+                    style={{ fontFamily: 'monospace', fontSize: '0.8rem', width: '100%', resize: 'none' }}
+                    placeholder="Barcode&#9;Name&#9;Price&#9;Category&#9;Stock&#9;Artist&#10;8850125&#9;Sticker A&#9;10.00&#9;Stickers&#9;50&#9;Alice&#10;8850126&#9;Print B&#9;40.00&#9;Prints&#9;10&#9;Bob"
+                    value={pasteText}
+                    onChange={(e) => {
+                      setPasteText(e.target.value);
+                      handleParseText(e.target.value);
+                    }}
+                  />
+                </div>
+              )}
+
+              {bulkTab === 'export' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'center', padding: '2rem 1rem', textAlign: 'center' }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--primary)',
+                    marginBottom: '0.5rem'
+                  }}>
+                    <FileSpreadsheet size={32} />
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>Backup / Edit in Excel</h4>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '320px', margin: '0 auto' }}>
+                      Export your entire inventory catalog to a standard CSV file, which you can edit in Google Sheets or Excel.
+                    </p>
+                  </div>
+                  <button type="button" className="btn btn-primary" onClick={handleExportCSV} style={{ padding: '0.6rem 1.5rem' }}>
+                    <Download size={16} /> Export Catalog (.csv)
+                  </button>
+                </div>
+              )}
+
+              {/* Parsed Results Preview */}
+              {parsedProducts.length > 0 && (
+                <div style={{
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(0, 0, 0, 0.15)',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    padding: '0.75rem 1rem',
+                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                    borderBottom: '1px solid var(--border-color)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <CheckCircle2 size={16} /> Ready to Import: {parsedProducts.length} Items
+                    </span>
+                  </div>
+                  
+                  <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                          <th style={{ padding: '0.5rem' }}>Name</th>
+                          <th style={{ padding: '0.5rem' }}>Price</th>
+                          <th style={{ padding: '0.5rem' }}>Stock</th>
+                          <th style={{ padding: '0.5rem' }}>Artist</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsedProducts.map((p, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                            <td style={{ padding: '0.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>{p.emoji} {p.name}</td>
+                            <td style={{ padding: '0.5rem' }}>฿{p.price.toFixed(2)}</td>
+                            <td style={{ padding: '0.5rem' }}>{p.stock}</td>
+                            <td style={{ padding: '0.5rem', color: 'var(--primary)', fontWeight: 500 }}>{p.artist}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Parsing Errors list */}
+              {parseErrors.length > 0 && (
+                <div style={{
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.04)',
+                  padding: '1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem'
+                }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <AlertTriangle size={16} /> Data Validation Errors / Alerts
+                  </span>
+                  <ul style={{ paddingLeft: '1.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    {parseErrors.map((err, idx) => (
+                      <li key={idx} style={{ color: 'rgba(248, 113, 113, 0.9)' }}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Confirm Actions */}
+              {parsedProducts.length > 0 && (
+                <div style={{
+                  borderTop: '1px solid var(--border-color)',
+                  paddingTop: '1rem',
+                  marginTop: '0.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem'
+                }}>
+                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Import Mode:</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                      <input 
+                        type="radio" 
+                        name="importMode" 
+                        value="merge" 
+                        checked={importMode === 'merge'} 
+                        onChange={() => setImportMode('merge')} 
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span>Merge (Add new & update existing barcodes)</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                      <input 
+                        type="radio" 
+                        name="importMode" 
+                        value="overwrite" 
+                        checked={importMode === 'overwrite'} 
+                        onChange={() => setImportMode('overwrite')} 
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{ color: 'var(--danger)' }}>Overwrite (Replace entire catalog)</span>
+                    </label>
+                  </div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => {
+                        setParsedProducts([]);
+                        setParseErrors([]);
+                        setPasteText('');
+                      }}
+                    >
+                      Clear
+                    </button>
+                    <button type="button" className="btn btn-primary" onClick={handleConfirmImport}>
+                      Confirm Import
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

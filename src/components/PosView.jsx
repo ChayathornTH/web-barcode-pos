@@ -81,12 +81,20 @@ export default function PosView({
   const [promptPayId, setPromptPayId] = useState(localStorage.getItem('promptPayId') || '0812345678');
   
   const manualInputRef = useRef(null);
+  const audioCtxRef = useRef(null);
 
   // Play audio beep on scan success
   const playBeep = useCallback(() => {
     if (isMuted) return;
     try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const audioCtx = audioCtxRef.current;
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
       
@@ -156,7 +164,7 @@ export default function PosView({
       setAppliedDiscount({ code: 'ARTFEST (20%)', percent: 20 });
       setDiscountCode('');
     } else if (code === 'FREESHIP') {
-      setAppliedDiscount({ code: 'FREESHIP ($5.00 Flat)', percent: 'flat-5' });
+      setAppliedDiscount({ code: 'FREESHIP (฿5.00 Flat)', percent: 'flat-5' });
       setDiscountCode('');
     } else {
       setDiscountError('Invalid promo code.');
@@ -322,6 +330,7 @@ export default function PosView({
     if (a.category !== b.category) {
       return a.category.localeCompare(b.category);
     }
+    return a.name.localeCompare(b.name);
   });
 
   const renderCartItem = (item) => (
@@ -798,7 +807,7 @@ export default function PosView({
             {paymentMethod === 'cash' ? (
               <div>
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ ...styles.formLabel, fontSize: '0.8rem', marginBottom: '0.4rem', display: 'block', color: 'var(--text-secondary)' }}>
+                  <label style={{ fontSize: '0.8rem', marginBottom: '0.4rem', display: 'block', color: 'var(--text-secondary)' }}>
                     Cash Received (฿)
                   </label>
                   <input 
@@ -891,7 +900,7 @@ export default function PosView({
             ) : (
               <div>
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ ...styles.formLabel, fontSize: '0.8rem', marginBottom: '0.4rem', display: 'block', color: 'var(--text-secondary)' }}>
+                  <label style={{ fontSize: '0.8rem', marginBottom: '0.4rem', display: 'block', color: 'var(--text-secondary)' }}>
                     PromptPay ID (Phone or Tax ID)
                   </label>
                   <input 
@@ -1150,11 +1159,10 @@ export default function PosView({
                   onChange={(e) => setCustomCategory(e.target.value)}
                   style={{ width: '100%' }}
                 >
-                  <option value="Paintings">Paintings</option>
-                  <option value="Prints">Prints</option>
+                  <option value="Acrylics">Acrylics</option>
                   <option value="Stickers">Stickers</option>
-                  <option value="Accessories">Accessories</option>
-                  <option value="Stationery">Stationery</option>
+                  <option value="Postcards">Postcards</option>
+                  <option value="Books">Books</option>
                   <option value="Other">Other</option>
                 </select>
               </div>

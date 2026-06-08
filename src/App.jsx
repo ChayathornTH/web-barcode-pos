@@ -502,6 +502,49 @@ export default function App() {
     addToast(`Deleted "${prod?.name || 'product'}" from database.`, 'warning');
   };
 
+  const handleImportProducts = async (importedProds, overwrite = false) => {
+    try {
+      let updatedList;
+      if (overwrite) {
+        if (boothId) {
+          for (const p of products) {
+            await deleteProductRecord(boothId, p.id);
+          }
+        }
+        updatedList = importedProds;
+      } else {
+        const mergedMap = new Map();
+        products.forEach(p => {
+          mergedMap.set(p.barcode || p.id, p);
+        });
+        importedProds.forEach(p => {
+          const key = p.barcode || p.id;
+          const existing = mergedMap.get(key);
+          const id = existing ? existing.id : (p.id || `prod-${p.barcode}-${Date.now()}`);
+          mergedMap.set(key, { ...p, id });
+        });
+        updatedList = Array.from(mergedMap.values());
+      }
+
+      const normalized = normalizeProducts(updatedList);
+
+      if (boothId) {
+        for (const p of normalized) {
+          await addProductRecord(boothId, p);
+        }
+      } else {
+        setProducts(normalized);
+        localStorage.setItem('pos_products', JSON.stringify(normalized));
+      }
+      addToast(`Successfully imported ${importedProds.length} products.`, 'success');
+      return true;
+    } catch (err) {
+      console.error(err);
+      addToast(`Import failed: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
   const handleResetInventory = async () => {
     if (window.confirm("Are you sure you want to restore the inventory catalog from products.csv? This will overwrite custom products and reset all changes.")) {
       try {
@@ -767,6 +810,7 @@ export default function App() {
             onDeleteProduct={handleDeleteProduct}
             onSimulateScan={handleScanEvent}
             onResetInventory={handleResetInventory}
+            onImportProducts={handleImportProducts}
           />
         )}
 
