@@ -168,7 +168,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
 
     // Detect delimiter
     const headerLine = lines[0];
-    let delimiter = ',';
+    let delimiter;
     if (headerLine.includes('\t')) {
       delimiter = '\t';
     } else if (headerLine.includes(',')) {

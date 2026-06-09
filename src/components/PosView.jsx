@@ -209,7 +209,7 @@ export default function PosView({
     const subtotalVal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const taxVal = 0; // VAT removed
     
-    let discountAmt = 0;
+    let discountAmt;
     const remainingSubtotalVal = Math.max(0, subtotalVal - totalSetDiscountVal);
     
     if (appliedDiscount.percent === 'flat-5') {
@@ -1439,10 +1439,15 @@ const styles = {
     borderRadius: '12px',
     boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
     animation: 'slideIn 0.25s ease-out forwards',
+    maxHeight: '90vh',
+    display: 'flex',
+    flexDirection: 'column',
   },
   receiptBody: {
     background: '#ffffff',
     padding: '0.5rem',
+    overflowY: 'auto',
+    flex: 1,
   },
   receiptHeader: {
     textAlign: 'center',

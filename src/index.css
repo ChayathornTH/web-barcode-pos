@@ -609,3 +609,35 @@ select.custom-input option {
 .item-row {
   animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Print Styles to ensure scrollable receipt modals print fully without truncation or scrollbars */
+@media print {
+  div[style*="position: fixed"][style*="z-index: 100"] {
+    position: absolute !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .glass-panel[style*="max-height: 90vh"] {
+    max-height: none !important;
+    height: auto !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  #printable-receipt, 
+  #printable-history-receipt {
+    max-height: none !important;
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+  }
+
+  button, 
+  .btn,
+  div[style*="border-top: 1px solid #e2e8f0"] {
+    display: none !important;
+  }
+}

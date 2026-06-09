@@ -1,6 +1,90 @@
 import { useState, useMemo } from 'react';
 import { DollarSign, FileText, ShoppingBag, TrendingUp, Calendar, ArrowUpRight, Eye, Printer, X, Download, Trash2 } from 'lucide-react';
 
+// Generic Optimal Set Discount Calculation helper (same as PosView.jsx)
+const calculateOptimalGroupDiscount = (qty, tiers, basePrice = 10.00) => {
+  if (qty <= 0 || !tiers || tiers.length === 0) return 0;
+  const validTiers = tiers.map(t => {
+    const disc = t.discount !== undefined ? t.discount : Math.max(0, basePrice * t.quantity - (t.price || 0));
+    const discNum = typeof disc === 'number' ? disc : (parseFloat(disc) || 0);
+    return { quantity: t.quantity, discount: discNum };
+  }).filter(t => t.quantity > 0 && t.discount >= 0);
+
+  if (validTiers.length === 0) return 0;
+
+  validTiers.sort((a, b) => a.quantity - b.quantity);
+  const dp = Array(qty + 1).fill(0);
+
+  for (let i = 1; i <= qty; i++) {
+    let maxDisc = dp[i - 1];
+    for (const tier of validTiers) {
+      if (i >= tier.quantity) {
+        maxDisc = Math.max(maxDisc, dp[i - tier.quantity] + tier.discount);
+      }
+    }
+    dp[i] = maxDisc;
+  }
+  return dp[qty];
+};
+
+// Helper to calculate exact line gross, set discount, and net share for each item in a sale
+const calculateReceiptLineNets = (sale) => {
+  // 1. Map items to temporary objects to avoid mutating original receipt items
+  const saleItems = sale.items.map((item, index) => ({
+    item,
+    index,
+    gross: item.price * item.quantity,
+    setDiscount: 0,
+    afterSetDiscount: item.price * item.quantity
+  }));
+
+  // 2. Group these mapped items by set group to calculate set/sticker discounts
+  const setGroups = {};
+  saleItems.forEach(mapped => {
+    const item = mapped.item;
+    if (item.isSetPriced) {
+      const groupKey = item.setGroupName ? item.setGroupName.trim() : `single-${item.id}`;
+      if (!setGroups[groupKey]) {
+        setGroups[groupKey] = {
+          mappedItems: [],
+          tiers: item.setTiers || []
+        };
+      }
+      setGroups[groupKey].mappedItems.push(mapped);
+    }
+  });
+
+  // 3. Calculate set discount for each set group and assign it to mapped items
+  Object.keys(setGroups).forEach(groupKey => {
+    const group = setGroups[groupKey];
+    const totalQty = group.mappedItems.reduce((sum, m) => sum + m.item.quantity, 0);
+    const basePrice = group.mappedItems[0]?.item.price || 10.00;
+    const groupDiscount = calculateOptimalGroupDiscount(totalQty, group.tiers, basePrice);
+    
+    // Distribute discount proportionally by quantity within the group
+    group.mappedItems.forEach(mapped => {
+      mapped.setDiscount = totalQty > 0 ? (mapped.item.quantity / totalQty) * groupDiscount : 0;
+      mapped.afterSetDiscount = Math.max(0, mapped.gross - mapped.setDiscount);
+    });
+  });
+
+  // 4. Calculate total remaining subtotal after set discounts
+  const remainingSubtotal = saleItems.reduce((sum, m) => sum + m.afterSetDiscount, 0);
+
+  // 5. Distribute the final total paid in the sale proportionally to afterSetDiscount
+  const total = sale.total;
+  return saleItems.map(mapped => {
+    let netShare = 0;
+    if (remainingSubtotal > 0) {
+      netShare = (mapped.afterSetDiscount / remainingSubtotal) * total;
+    }
+    return {
+      ...mapped,
+      netShare
+    };
+  });
+};
+
 export default function DashboardView({ salesHistory, onResetSalesHistory }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
 
@@ -69,28 +153,15 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     // Artist Distribution (Proportional Net Share Split)
     const artistSales = {};
     salesHistory.forEach(sale => {
-      const subtotal = sale.subtotal || 1;
-      const total = sale.total;
-      
-      const receiptArtistTotals = {};
-      sale.items.forEach(item => {
-        const name = item.artist || 'Unknown';
-        if (!receiptArtistTotals[name]) {
-          receiptArtistTotals[name] = { subtotal: 0, quantity: 0 };
-        }
-        receiptArtistTotals[name].subtotal += (item.price * item.quantity);
-        receiptArtistTotals[name].quantity += item.quantity;
-      });
-
-      Object.keys(receiptArtistTotals).forEach(name => {
-        const stats = receiptArtistTotals[name];
+      const lineNets = calculateReceiptLineNets(sale);
+      lineNets.forEach(line => {
+        const name = line.item.artist || 'Unknown';
         if (!artistSales[name]) {
           artistSales[name] = { gross: 0, net: 0, quantity: 0 };
         }
-        artistSales[name].gross += stats.subtotal;
-        artistSales[name].quantity += stats.quantity;
-        const netShare = subtotal > 0 ? (stats.subtotal / subtotal) * total : 0;
-        artistSales[name].net += netShare;
+        artistSales[name].gross += line.gross;
+        artistSales[name].quantity += line.item.quantity;
+        artistSales[name].net += line.netShare;
       });
     });
 
@@ -141,6 +212,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       "Quantity", 
       "Unit Price (฿)", 
       "Line Subtotal (฿)", 
+      "Line Net Share (฿)",
       "Sticker Discount (฿)",
       "Coupon Code", 
       "Coupon Discount (฿)", 
@@ -152,16 +224,18 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     
     const rows = [];
     salesHistory.forEach(sale => {
-      sale.items.forEach((item, index) => {
+      const lineNets = calculateReceiptLineNets(sale);
+      lineNets.forEach((line, index) => {
         rows.push([
           sale.id,
           sale.timestamp,
-          item.name,
-          item.category,
-          item.artist || 'Unknown',
-          item.quantity,
-          item.price.toFixed(2),
-          (item.price * item.quantity).toFixed(2),
+          line.item.name,
+          line.item.category,
+          line.item.artist || 'Unknown',
+          line.item.quantity,
+          line.item.price.toFixed(2),
+          line.gross.toFixed(2),
+          line.netShare.toFixed(2),
           index === 0 ? (sale.stickerDiscount || 0).toFixed(2) : "0.00",
           sale.discount.code || "None",
           index === 0 ? (sale.discount.amount || 0).toFixed(2) : "0.00",
@@ -799,6 +873,9 @@ const styles = {
     borderRadius: '12px',
     boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
     position: 'relative',
+    maxHeight: '90vh',
+    display: 'flex',
+    flexDirection: 'column',
   },
   closeBtn: {
     position: 'absolute',
@@ -808,9 +885,13 @@ const styles = {
     border: 'none',
     color: '#64748b',
     cursor: 'pointer',
+    zIndex: 10, // Ensure it sits above scrollable content
   },
   receiptBody: {
     background: '#ffffff',
+    overflowY: 'auto',
+    flex: 1,
+    paddingRight: '0.5rem',
   },
   receiptHeader: {
     textAlign: 'center',
