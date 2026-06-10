@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Plus, Minus, Trash2, Printer, CheckCircle, Grid } from 'lucide-react';
 
-const CATEGORIES = ['All', 'Stickers', 'Acrylics', 'Postcards', 'Books', 'Other'];
+const CATEGORIES = ['All', 'Postcard', 'Photo card', 'Stickers', 'Books', 'Acrylics', 'Others'];
 
 const generateReceiptId = () => `REC-${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -27,7 +27,7 @@ export default function PosView({
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customPrice, setCustomPrice] = useState('');
-  const [customCategory, setCustomCategory] = useState('Other');
+  const [customCategory, setCustomCategory] = useState('Others');
   const [customArtist, setCustomArtist] = useState('');
 
   const [manualCode, setManualCode] = useState('');
@@ -1094,7 +1094,20 @@ export default function PosView({
       {/* Custom Price / Charge Modal */}
       {isCustomModalOpen && (
         <div style={styles.modalOverlay}>
-          <div className="glass-panel" style={styles.receiptContainer}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '400px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            animation: 'slideIn 0.25s ease-out forwards',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
               <h3 style={{ color: 'var(--text-primary)' }}>➕ Add Custom Charge</h3>
               <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.25rem' }} onClick={() => setIsCustomModalOpen(false)}>
@@ -1107,7 +1120,7 @@ export default function PosView({
               onAddCustomItem(customName || 'Custom Art Item', customPrice, customCategory, customArtist || 'Unknown');
               setCustomName('');
               setCustomPrice('');
-              setCustomCategory('Other');
+              setCustomCategory('Others');
               setCustomArtist('');
               setIsCustomModalOpen(false);
             }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.25rem' }}>
@@ -1146,11 +1159,9 @@ export default function PosView({
                   onChange={(e) => setCustomCategory(e.target.value)}
                   style={{ width: '100%' }}
                 >
-                  <option value="Acrylics">Acrylics</option>
-                  <option value="Stickers">Stickers</option>
-                  <option value="Postcards">Postcards</option>
-                  <option value="Books">Books</option>
-                  <option value="Other">Other</option>
+                  {CATEGORIES.filter(cat => cat !== 'All').map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
               </div>
 

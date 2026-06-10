@@ -118,7 +118,7 @@ const parseCSVProducts = (text) => {
       if (key === 'barcode') product.barcode = val;
       else if (key === 'name') product.name = val;
       else if (key === 'price') product.price = parseFloat(val) || 0;
-      else if (key === 'category') product.category = val || 'Other';
+      else if (key === 'category') product.category = val || 'Others';
       else if (key === 'stock') product.stock = parseInt(val) || 0;
       else if (key === 'artist' || key === 'owner') product.artist = val || 'Unknown';
       else if (key === 'emoji') product.emoji = val || '📦';
@@ -602,7 +602,7 @@ export default function App() {
   };
 
   // Custom Item sale injection (adds virtual art commissions directly to cart)
-  const handleAddCustomCartItem = (name, price, category = 'Other', artist = 'Unknown') => {
+  const handleAddCustomCartItem = (name, price, category = 'Others', artist = 'Unknown') => {
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum <= 0) {
       addToast("Invalid custom item price.", "error");

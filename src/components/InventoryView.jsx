@@ -1,23 +1,25 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Search, Trash2, Edit3, X, Barcode as BarcodeIcon, RotateCcw, AlertTriangle, Copy, Upload, Download, FileSpreadsheet, Clipboard, CheckCircle2 } from 'lucide-react';
 
 
 const CATEGORIES = [
+  "Postcard",
+  "Photo card",
   "Stickers",
-  "Acrylics",
-  "Postcards",
   "Books",
-  "Other"
+  "Acrylics",
+  "Others"
 ];
 
 const normalizeCategoryName = (cat) => {
-  if (!cat) return 'Other';
+  if (!cat) return 'Others';
   const c = cat.trim().toLowerCase();
   if (c === 'paintings' || c === 'painting' || c === 'acrylics' || c === 'acrylic' || c === 'art') return 'Acrylics';
-  if (c === 'prints' || c === 'print' || c === 'postcards' || c === 'postcard') return 'Postcards';
+  if (c === 'prints' || c === 'print' || c === 'postcards' || c === 'postcard') return 'Postcard';
   if (c === 'stickers' || c === 'sticker') return 'Stickers';
   if (c === 'books' || c === 'book' || c === 'stationery') return 'Books';
-  return 'Other';
+  if (c === 'photocard' || c === 'photo card' || c === 'photos' || c === 'photo') return 'Photo card';
+  return 'Others';
 };
 
 // Helper to match emojis based on product characteristics
@@ -36,18 +38,16 @@ const getEmojiForProduct = (name, category) => {
   // Fallbacks by category
   switch (category) {
     case "Acrylics":
-    case "Paintings":
       return '🎨';
-    case "Postcards":
-    case "Prints":
+    case "Postcard":
       return '🖼️';
+    case "Photo card":
+      return '📸';
     case "Stickers":
       return '✨';
     case "Books":
-    case "Stationery":
       return '📓';
-    case "Other":
-    case "Accessories":
+    case "Others":
       return '📦';
     default:
       return '📦';
@@ -88,7 +88,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   const [name, setName] = useState('');
   const [artist, setArtist] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState('Other');
+  const [category, setCategory] = useState('Others');
   const [stock, setStock] = useState('');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
@@ -433,7 +433,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setBarcode('');
     setName('');
     setPrice('');
-    setCategory('Other');
+    setCategory('Others');
     setStock('');
     setDescription('');
     setImage('');
@@ -565,6 +565,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
       }
     }
 
+    const normalizedCategory = normalizeCategoryName(category);
+
     if (editingProduct) {
       // Update
       onUpdateProduct({
@@ -572,7 +574,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         barcode,
         name,
         price: priceNum,
-        category,
+        category: normalizedCategory,
         stock: stockNum,
         artist: artist.trim(),
         description,
@@ -589,7 +591,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         barcode,
         name,
         price: priceNum,
-        category,
+        category: normalizedCategory,
         stock: stockNum,
         artist: artist.trim(),
         description,
@@ -698,7 +700,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
               style={styles.categorySelect}
             >
               <option value="All">All Categories</option>
-              {CATEGORIES.map(cat => (
+              {categoriesList.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
