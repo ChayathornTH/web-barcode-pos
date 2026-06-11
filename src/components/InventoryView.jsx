@@ -56,6 +56,7 @@ const getEmojiForProduct = (name, category) => {
 
 export default function InventoryView({ products, onAddProduct, onUpdateProduct, onDeleteProduct, onSimulateScan, onResetInventory, onImportProducts }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [failedImages, setFailedImages] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -796,9 +797,26 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
           filteredProducts.map(product => (
             <div key={product.id} className="glass-panel glass-panel-hover" style={styles.productCard}>
               <div style={styles.cardHeader}>
-                {product.image ? (
+                {!failedImages[product.id] ? (
                   <div style={styles.imageContainer}>
-                    <img src={product.image} alt={product.name} style={styles.productCardImage} />
+                    <img 
+                      src={(() => {
+                        let img = product.image ? product.image.trim() : '';
+                        if (!img) {
+                          return `/web-barcode-pos/product-images/${product.name}.png`;
+                        }
+                        if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) {
+                          return img;
+                        }
+                        if (!/\.(png|jpe?g|webp|gif)$/i.test(img)) {
+                          img += '.png';
+                        }
+                        return `/web-barcode-pos/product-images/${img}`;
+                      })()} 
+                      alt={product.name} 
+                      style={styles.productCardImage} 
+                      onError={() => setFailedImages(prev => ({ ...prev, [product.id]: true }))}
+                    />
                   </div>
                 ) : (
                   <div style={styles.emojiContainer}>{product.emoji}</div>
@@ -1115,7 +1133,20 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                   {image && (
                     <div style={styles.imagePreviewContainer}>
-                      <img src={image} alt="Preview" style={styles.imagePreview} />
+                      <img 
+                        src={(() => {
+                          let img = image.trim();
+                          if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) {
+                            return img;
+                          }
+                          if (!/\.(png|jpe?g|webp|gif)$/i.test(img)) {
+                            img += '.png';
+                          }
+                          return `/web-barcode-pos/product-images/${img}`;
+                        })()} 
+                        alt="Preview" 
+                        style={styles.imagePreview} 
+                      />
                       <button 
                         type="button" 
                         onClick={() => setImage('')} 

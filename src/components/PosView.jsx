@@ -19,6 +19,7 @@ export default function PosView({
   onAddCustomItem // Prop to handle custom charge commissions
 }) {
   const [catalogSearch, setCatalogSearch] = useState('');
+  const [failedImages, setFailedImages] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedArtist, setSelectedArtist] = useState('All');
   const [activeMobileTab, setActiveMobileTab] = useState('catalog'); // 'catalog' | 'cart'
@@ -527,9 +528,26 @@ export default function PosView({
                     }}
                     title={isOutOfStock ? "Out of stock" : `Tap to add: ${product.name}`}
                   >
-                    {product.image ? (
+                    {!failedImages[product.id] ? (
                       <div className="catalog-card-image-wrapper">
-                        <img src={product.image} alt={product.name} className="catalog-card-img" />
+                        <img 
+                          src={(() => {
+                            let img = product.image ? product.image.trim() : '';
+                            if (!img) {
+                              return `/web-barcode-pos/product-images/${product.name}.png`;
+                            }
+                            if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) {
+                              return img;
+                            }
+                            if (!/\.(png|jpe?g|webp|gif)$/i.test(img)) {
+                              img += '.png';
+                            }
+                            return `/web-barcode-pos/product-images/${img}`;
+                          })()} 
+                          alt={product.name} 
+                          className="catalog-card-img" 
+                          onError={() => setFailedImages(prev => ({ ...prev, [product.id]: true }))}
+                        />
                       </div>
                     ) : (
                       <div className="catalog-card-emoji">{product.emoji}</div>
