@@ -97,8 +97,13 @@ export default function PosView({
   };
 
   const formatTiersInfo = (product) => {
-    if (!product.isSetPriced || !product.setTiers || product.setTiers.length === 0) return "";
-    const sortedTiers = [...product.setTiers].sort((a, b) => a.quantity - b.quantity);
+    if (!product.isSetPriced) return "";
+    let tiers = product.setTiers;
+    if (typeof tiers === 'string') {
+      try { tiers = JSON.parse(tiers); } catch (e) { tiers = []; }
+    }
+    if (!Array.isArray(tiers) || tiers.length === 0) return "";
+    const sortedTiers = [...tiers].sort((a, b) => a.quantity - b.quantity);
     return sortedTiers.map(t => {
       const price = t.price !== undefined ? t.price : Math.max(0, (product.price || 0) * t.quantity - (t.discount || 0));
       const priceNum = typeof price === 'number' ? price : (parseFloat(price) || 0);
@@ -143,8 +148,12 @@ export default function PosView({
 
   // Generic Optimal Set Discount Calculation
   const calculateOptimalGroupDiscount = (qty, tiers, basePrice = 10.00) => {
-    if (qty <= 0 || !tiers || tiers.length === 0) return 0;
-    const validTiers = tiers.map(t => {
+    let activeTiers = tiers;
+    if (typeof activeTiers === 'string') {
+      try { activeTiers = JSON.parse(activeTiers); } catch (e) { activeTiers = []; }
+    }
+    if (qty <= 0 || !Array.isArray(activeTiers) || activeTiers.length === 0) return 0;
+    const validTiers = activeTiers.map(t => {
       const disc = t.discount !== undefined ? t.discount : Math.max(0, basePrice * t.quantity - (t.price || 0));
       const discNum = typeof disc === 'number' ? disc : (parseFloat(disc) || 0);
       return { quantity: t.quantity, discount: discNum };

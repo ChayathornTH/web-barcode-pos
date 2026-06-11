@@ -18,9 +18,13 @@ import {
 const normalizeProducts = (items) => {
   if (!Array.isArray(items)) return [];
   return items.map(p => {
-    if (p.isSetPriced && Array.isArray(p.setTiers)) {
+    let tiers = p.setTiers;
+    if (typeof tiers === 'string') {
+      try { tiers = JSON.parse(tiers); } catch (e) { tiers = []; }
+    }
+    if (p.isSetPriced && Array.isArray(tiers)) {
       const basePrice = p.price || 0;
-      const normalizedTiers = p.setTiers.map(t => {
+      const normalizedTiers = tiers.map(t => {
         const qty = t.quantity || 1;
         let tPrice = t.price;
         let tDiscount = t.discount;
@@ -35,6 +39,7 @@ const normalizeProducts = (items) => {
         }
         return {
           ...t,
+          quantity: typeof qty === 'number' ? qty : (parseInt(qty) || 1),
           price: typeof tPrice === 'number' ? tPrice : (parseFloat(tPrice) || 0),
           discount: typeof tDiscount === 'number' ? tDiscount : (parseFloat(tDiscount) || 0)
         };
@@ -51,9 +56,13 @@ const normalizeProducts = (items) => {
 const normalizeCart = (cartItems) => {
   if (!Array.isArray(cartItems)) return [];
   return cartItems.map(item => {
-    if (item.isSetPriced && Array.isArray(item.setTiers)) {
+    let tiers = item.setTiers;
+    if (typeof tiers === 'string') {
+      try { tiers = JSON.parse(tiers); } catch (e) { tiers = []; }
+    }
+    if (item.isSetPriced && Array.isArray(tiers)) {
       const basePrice = item.price || 0;
-      const normalizedTiers = item.setTiers.map(t => {
+      const normalizedTiers = tiers.map(t => {
         const qty = t.quantity || 1;
         let tPrice = t.price;
         let tDiscount = t.discount;
@@ -68,6 +77,7 @@ const normalizeCart = (cartItems) => {
         }
         return {
           ...t,
+          quantity: typeof qty === 'number' ? qty : (parseInt(qty) || 1),
           price: typeof tPrice === 'number' ? tPrice : (parseFloat(tPrice) || 0),
           discount: typeof tDiscount === 'number' ? tDiscount : (parseFloat(tDiscount) || 0)
         };
@@ -126,16 +136,44 @@ const parseCSVProducts = (text) => {
       else if (key === 'description') product.description = val;
       else if (key === 'issetpriced') product.isSetPriced = val.toLowerCase() === 'true';
       else if (key === 'setgroupname') product.setGroupName = val;
+      else if (key === 'set1qty') product.set1qty = parseInt(val) || 0;
+      else if (key === 'set1price') product.set1price = parseFloat(val) || 0;
+      else if (key === 'set2qty') product.set2qty = parseInt(val) || 0;
+      else if (key === 'set2price') product.set2price = parseFloat(val) || 0;
+      else if (key === 'set3qty') product.set3qty = parseInt(val) || 0;
+      else if (key === 'set3price') product.set3price = parseFloat(val) || 0;
     });
 
     product.id = product.id || `prod-${product.barcode || Math.random().toString(36).substr(2, 9)}`;
 
-    if (product.isSetPriced && (!product.setTiers || product.setTiers.length === 0)) {
-      product.setTiers = [
-        { quantity: 1, price: product.price, discount: 0 },
-        { quantity: 3, price: 25.00, discount: Math.max(0, product.price * 3 - 25.00) },
-        { quantity: 5, price: 35.00, discount: Math.max(0, product.price * 5 - 35.00) }
-      ];
+    if (product.isSetPriced) {
+      const tiers = [];
+      if (product.set1qty && product.set1price) {
+        tiers.push({ quantity: product.set1qty, price: product.set1price });
+      }
+      if (product.set2qty && product.set2price) {
+        tiers.push({ quantity: product.set2qty, price: product.set2price });
+      }
+      if (product.set3qty && product.set3price) {
+        tiers.push({ quantity: product.set3qty, price: product.set3price });
+      }
+
+      delete product.set1qty;
+      delete product.set1price;
+      delete product.set2qty;
+      delete product.set2price;
+      delete product.set3qty;
+      delete product.set3price;
+
+      if (tiers.length > 0) {
+        product.setTiers = tiers;
+      } else if (!product.setTiers || product.setTiers.length === 0) {
+        product.setTiers = [
+          { quantity: 1, price: product.price, discount: 0 },
+          { quantity: 3, price: 25.00, discount: Math.max(0, product.price * 3 - 25.00) },
+          { quantity: 5, price: 35.00, discount: Math.max(0, product.price * 5 - 35.00) }
+        ];
+      }
     }
 
     parsed.push(product);

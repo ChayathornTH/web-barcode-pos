@@ -75,7 +75,11 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     if (p.isSetPriced && p.setGroupName) {
       const nameKey = p.setGroupName.trim();
       if (!availableGroups[nameKey]) {
-        availableGroups[nameKey] = p.setTiers || [];
+        let tiers = p.setTiers;
+        if (typeof tiers === 'string') {
+          try { tiers = JSON.parse(tiers); } catch (e) { tiers = []; }
+        }
+        availableGroups[nameKey] = Array.isArray(tiers) ? tiers : [];
       }
     }
   });
@@ -134,7 +138,13 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
       setGroupSelectValue('');
     }
     
-    const tiers = product.setTiers || [];
+    let tiers = product.setTiers;
+    if (typeof tiers === 'string') {
+      try { tiers = JSON.parse(tiers); } catch (e) { tiers = []; }
+    }
+    if (!Array.isArray(tiers)) {
+      tiers = [];
+    }
     const getPriceVal = (t) => {
       if (!t) return '';
       if (t.price !== undefined) return t.price.toString();
@@ -236,6 +246,12 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         else if (header === 'description') p.description = val;
         else if (header === 'issetpriced') p.isSetPriced = val.toLowerCase() === 'true';
         else if (header === 'setgroupname') p.setGroupName = val;
+        else if (header === 'set1qty') p.set1qty = parseInt(val) || 0;
+        else if (header === 'set1price') p.set1price = parseFloat(val) || 0;
+        else if (header === 'set2qty') p.set2qty = parseInt(val) || 0;
+        else if (header === 'set2price') p.set2price = parseFloat(val) || 0;
+        else if (header === 'set3qty') p.set3qty = parseInt(val) || 0;
+        else if (header === 'set3price') p.set3price = parseFloat(val) || 0;
       });
 
       const rowNum = i + 1;
@@ -268,11 +284,34 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
       if (!p.emoji) p.emoji = getEmojiForProduct(p.name, p.category);
 
       if (p.isSetPriced) {
-        p.setTiers = [
-          { quantity: 1, price: p.price, discount: 0 },
-          { quantity: 3, price: p.price * 2.5, discount: Math.max(0, p.price * 3 - (p.price * 2.5)) },
-          { quantity: 5, price: p.price * 4.0, discount: Math.max(0, p.price * 5 - (p.price * 4.0)) }
-        ];
+        const tiers = [];
+        if (p.set1qty && p.set1price) {
+          tiers.push({ quantity: p.set1qty, price: p.set1price, discount: Math.max(0, p.price * p.set1qty - p.set1price) });
+        }
+        if (p.set2qty && p.set2price) {
+          tiers.push({ quantity: p.set2qty, price: p.set2price, discount: Math.max(0, p.price * p.set2qty - p.set2price) });
+        }
+        if (p.set3qty && p.set3price) {
+          tiers.push({ quantity: p.set3qty, price: p.set3price, discount: Math.max(0, p.price * p.set3qty - p.set3price) });
+        }
+
+        // Clean temporary properties
+        delete p.set1qty;
+        delete p.set1price;
+        delete p.set2qty;
+        delete p.set2price;
+        delete p.set3qty;
+        delete p.set3price;
+
+        if (tiers.length > 0) {
+          p.setTiers = tiers;
+        } else {
+          p.setTiers = [
+            { quantity: 1, price: p.price, discount: 0 },
+            { quantity: 3, price: p.price * 2.5, discount: Math.max(0, p.price * 3 - (p.price * 2.5)) },
+            { quantity: 5, price: p.price * 4.0, discount: Math.max(0, p.price * 5 - (p.price * 4.0)) }
+          ];
+        }
       }
 
       p.id = `prod-${p.barcode}-${Date.now() + i}`;
@@ -341,8 +380,18 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   };
 
   const handleExportCSV = () => {
-    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName"];
+    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName", "SET1_QTY", "SET1_Price", "SET2_QTY", "SET2_Price", "SET3_QTY", "SET3_Price"];
     const rows = products.map(p => {
+      let tiers = p.setTiers;
+      if (typeof tiers === 'string') {
+        try { tiers = JSON.parse(tiers); } catch (e) { tiers = []; }
+      }
+      if (!Array.isArray(tiers)) {
+        tiers = [];
+      }
+      const t1 = tiers[0] || {};
+      const t2 = tiers[1] || {};
+      const t3 = tiers[2] || {};
       return [
         p.barcode || '',
         `"${(p.name || '').replace(/"/g, '""')}"`,
@@ -354,7 +403,13 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
         p.image || '',
         `"${(p.description || '').replace(/"/g, '""')}"`,
         p.isSetPriced ? 'TRUE' : 'FALSE',
-        p.setGroupName || ''
+        p.setGroupName || '',
+        p.isSetPriced && t1.quantity ? t1.quantity : '',
+        p.isSetPriced && t1.price ? t1.price : '',
+        p.isSetPriced && t2.quantity ? t2.quantity : '',
+        p.isSetPriced && t2.price ? t2.price : '',
+        p.isSetPriced && t3.quantity ? t3.quantity : '',
+        p.isSetPriced && t3.price ? t3.price : ''
       ].join(',');
     });
     
@@ -371,10 +426,10 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName"];
+    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName", "SET1_QTY", "SET1_Price", "SET2_QTY", "SET2_Price", "SET3_QTY", "SET3_Price"];
     const sampleRows = [
-      ["8850125000114", "Cozy Coffee Shop Print", "15.00", "Prints", "25", "Bob", "☕", "", "Warm-toned illustration print", "FALSE", ""],
-      ["3001", "Holographic Sticker Pack", "12.00", "Stickers", "50", "Charlie", "✨", "", "Waterproof die-cut stickers", "TRUE", "Stickers"]
+      ["8850125000114", "Cozy Coffee Shop Print", "15.00", "Prints", "25", "Bob", "☕", "", "Warm-toned illustration print", "FALSE", "", "", "", "", "", "", ""],
+      ["3001", "Holographic Sticker Pack", "12.00", "Stickers", "50", "Charlie", "✨", "", "Waterproof die-cut stickers", "TRUE", "Stickers", "2", "20.00", "5", "45.00", "", ""]
     ].map(row => row.join(','));
     
     const csvContent = [headers.join(','), ...sampleRows].join('\n');
@@ -411,7 +466,13 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     } else {
       setGroupSelectValue('');
     }
-    const tiers = product.setTiers || [];
+    let tiers = product.setTiers;
+    if (typeof tiers === 'string') {
+      try { tiers = JSON.parse(tiers); } catch (e) { tiers = []; }
+    }
+    if (!Array.isArray(tiers)) {
+      tiers = [];
+    }
     const getPriceVal = (t) => {
       if (!t) return '';
       if (t.price !== undefined) return t.price.toString();
@@ -700,7 +761,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
               style={styles.categorySelect}
             >
               <option value="All">All Categories</option>
-              {categoriesList.map(cat => (
+              {CATEGORIES.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>

@@ -3,8 +3,12 @@ import { DollarSign, FileText, ShoppingBag, TrendingUp, Calendar, ArrowUpRight, 
 
 // Generic Optimal Set Discount Calculation helper (same as PosView.jsx)
 const calculateOptimalGroupDiscount = (qty, tiers, basePrice = 10.00) => {
-  if (qty <= 0 || !tiers || tiers.length === 0) return 0;
-  const validTiers = tiers.map(t => {
+  let activeTiers = tiers;
+  if (typeof activeTiers === 'string') {
+    try { activeTiers = JSON.parse(activeTiers); } catch (e) { activeTiers = []; }
+  }
+  if (qty <= 0 || !Array.isArray(activeTiers) || activeTiers.length === 0) return 0;
+  const validTiers = activeTiers.map(t => {
     const disc = t.discount !== undefined ? t.discount : Math.max(0, basePrice * t.quantity - (t.price || 0));
     const discNum = typeof disc === 'number' ? disc : (parseFloat(disc) || 0);
     return { quantity: t.quantity, discount: discNum };
