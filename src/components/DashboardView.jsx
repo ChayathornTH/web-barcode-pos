@@ -112,15 +112,21 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     salesHistory.forEach(sale => {
       let hour = 12;
       try {
-        const timeStr = sale.timestamp.split(',')[1]?.trim();
-        if (timeStr) {
-          const parts = timeStr.split(':');
-          let hr = parseInt(parts[0]);
-          const isPM = timeStr.toLowerCase().includes('pm');
-          const isAM = timeStr.toLowerCase().includes('am');
-          if (isPM && hr < 12) hr += 12;
-          if (isAM && hr === 12) hr = 0;
-          hour = hr;
+        if (sale.timestamp) {
+          const cleaned = sale.timestamp.replace(',', '').trim();
+          const parts = cleaned.split(/\s+/);
+          // If there is a space separating date and time, parts[1] is the time string.
+          // Otherwise, fall back to parts[0]
+          const timeStr = parts[1] || parts[0];
+          if (timeStr && timeStr.includes(':')) {
+            const timeParts = timeStr.split(':');
+            let hr = parseInt(timeParts[0]);
+            const isPM = cleaned.toLowerCase().includes('pm');
+            const isAM = cleaned.toLowerCase().includes('am');
+            if (isPM && hr < 12) hr += 12;
+            if (isAM && hr === 12) hr = 0;
+            hour = hr;
+          }
         }
       } catch {
         hour = 12;

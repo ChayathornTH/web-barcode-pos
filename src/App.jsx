@@ -187,7 +187,8 @@ export default function App() {
   
   // Cloud Sync Settings State
   const [boothId, setBoothId] = useState(() => {
-    return localStorage.getItem('pos_booth_id') || "";
+    const saved = localStorage.getItem('pos_booth_id');
+    return saved ? saved.trim().toUpperCase() : "";
   });
 
   // Database States
