@@ -22,6 +22,9 @@ export default function PosView({
   const [failedImages, setFailedImages] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedArtist, setSelectedArtist] = useState('All');
+  const [showInStockOnly, setShowInStockOnly] = useState(false);
+  const [showSetOnly, setShowSetOnly] = useState(false);
+  const [sortBy, setSortBy] = useState('default');
   const [activeMobileTab, setActiveMobileTab] = useState('catalog'); // 'catalog' | 'cart'
   
   // Custom Charge States
@@ -299,36 +302,50 @@ export default function PosView({
     return Array.from(new Set(products.map(p => p.artist || 'Unknown').filter(Boolean))).sort();
   }, [products]);
 
-  // Filter and sort catalog products so items in the same group are next to each other
+  // Filter and sort catalog products
   const filteredCatalogProducts = useMemo(() => {
-    return products.filter(p => {
+    let items = products.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || 
                             p.artist?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
                             p.description?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
                             p.barcode.includes(catalogSearch);
       const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
       const matchesArtist = selectedArtist === 'All' || (p.artist || 'Unknown') === selectedArtist;
-      return matchesSearch && matchesCategory && matchesArtist;
-    }).sort((a, b) => {
-      const aGroup = (a.isSetPriced && a.setGroupName) ? a.setGroupName.trim().toLowerCase() : '';
-      const bGroup = (b.isSetPriced && b.setGroupName) ? b.setGroupName.trim().toLowerCase() : '';
-      
-      if (aGroup && bGroup) {
-        if (aGroup !== bGroup) {
-          return aGroup.localeCompare(bGroup);
+      const matchesStock = !showInStockOnly || p.stock > 0;
+      const matchesSet = !showSetOnly || p.isSetPriced;
+      return matchesSearch && matchesCategory && matchesArtist && matchesStock && matchesSet;
+    });
+
+    if (sortBy === 'price-asc') {
+      items.sort((a, b) => a.price - b.price);
+    } else if (sortBy === 'price-desc') {
+      items.sort((a, b) => b.price - a.price);
+    } else if (sortBy === 'name-asc') {
+      items.sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      // Default: sort ungrouped or grouped set priced items next to each other
+      items.sort((a, b) => {
+        const aGroup = (a.isSetPriced && a.setGroupName) ? a.setGroupName.trim().toLowerCase() : '';
+        const bGroup = (b.isSetPriced && b.setGroupName) ? b.setGroupName.trim().toLowerCase() : '';
+        
+        if (aGroup && bGroup) {
+          if (aGroup !== bGroup) {
+            return aGroup.localeCompare(bGroup);
+          }
+          return a.name.localeCompare(b.name);
+        }
+        if (aGroup) return -1;
+        if (bGroup) return 1;
+        
+        // Sort ungrouped items by category then name
+        if (a.category !== b.category) {
+          return a.category.localeCompare(b.category);
         }
         return a.name.localeCompare(b.name);
-      }
-      if (aGroup) return -1;
-      if (bGroup) return 1;
-      
-      // Sort ungrouped items by category then name
-      if (a.category !== b.category) {
-        return a.category.localeCompare(b.category);
-      }
-      return a.name.localeCompare(b.name);
-    });
-  }, [products, catalogSearch, selectedCategory, selectedArtist]);
+      });
+    }
+    return items;
+  }, [products, catalogSearch, selectedCategory, selectedArtist, showInStockOnly, showSetOnly, sortBy]);
 
   const renderCartItem = (item) => (
     <div key={item.id} className="item-row cart-row">
@@ -476,6 +493,93 @@ export default function PosView({
                   ))}
                 </select>
               </div>
+
+              {/* Sorting and Toggle Filters Row */}
+              <div style={{ display: 'flex', gap: '0.5rem', width: '100%', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Sort:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="custom-input"
+                    style={{ padding: '0.35rem 2rem 0.35rem 0.75rem', fontSize: '0.8rem', minWidth: '120px' }}
+                  >
+                    <option value="default">Default Sort</option>
+                    <option value="price-asc">Price: Low to High</option>
+                    <option value="price-desc">Price: High to Low</option>
+                    <option value="name-asc">Name: A to Z</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowInStockOnly(!showInStockOnly)}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    borderRadius: '20px',
+                    border: '1px solid transparent',
+                    transition: 'all var(--transition-fast)',
+                    outline: 'none',
+                    backgroundColor: showInStockOnly ? 'var(--primary)' : 'rgba(255, 255, 255, 0.03)',
+                    borderColor: showInStockOnly ? 'var(--primary)' : 'var(--border-color)',
+                    color: showInStockOnly ? 'var(--text-primary)' : 'var(--text-secondary)'
+                  }}
+                >
+                  📦 In-Stock Only
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSetOnly(!showSetOnly)}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    borderRadius: '20px',
+                    border: '1px solid transparent',
+                    transition: 'all var(--transition-fast)',
+                    outline: 'none',
+                    backgroundColor: showSetOnly ? 'var(--primary)' : 'rgba(255, 255, 255, 0.03)',
+                    borderColor: showSetOnly ? 'var(--primary)' : 'var(--border-color)',
+                    color: showSetOnly ? 'var(--text-primary)' : 'var(--text-secondary)'
+                  }}
+                >
+                  🏷️ Bulk Promo Only
+                </button>
+
+                {(catalogSearch || selectedCategory !== 'All' || selectedArtist !== 'All' || showInStockOnly || showSetOnly || sortBy !== 'default') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCatalogSearch('');
+                      setSelectedCategory('All');
+                      setSelectedArtist('All');
+                      setShowInStockOnly(false);
+                      setShowSetOnly(false);
+                      setSortBy('default');
+                    }}
+                    style={{
+                      padding: '0.3rem 0.75rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      borderColor: 'rgba(239, 68, 68, 0.2)',
+                      color: 'var(--danger)',
+                      transition: 'all var(--transition-fast)',
+                      marginLeft: 'auto'
+                    }}
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
               
               <div className="catalog-tabs">
                 {CATEGORIES.map(cat => (
@@ -513,87 +617,103 @@ export default function PosView({
                 </div>
               </div>
 
-              {filteredCatalogProducts.map(product => {
-                const isOutOfStock = product.stock === 0;
-                return (
-                  <div 
-                    key={product.id} 
-                    className={`glass-panel glass-panel-hover catalog-card ${isOutOfStock ? 'disabled' : ''}`}
-                    onClick={() => handleProductClick(product)}
-                    style={{
-                      ...styles.cardClickReset,
-                      opacity: isOutOfStock ? 0.45 : 1,
-                      cursor: isOutOfStock ? 'not-allowed' : 'pointer',
-                      border: isOutOfStock ? '1px dashed var(--border-color)' : '1px solid var(--border-color)'
-                    }}
-                    title={isOutOfStock ? "Out of stock" : `Tap to add: ${product.name}`}
-                  >
-                    {!failedImages[product.id] ? (
-                      <div className="catalog-card-image-wrapper">
-                        <img 
-                          src={(() => {
-                            let img = product.image ? product.image.trim() : '';
-                            if (!img) {
-                              return `/web-barcode-pos/product-images/${product.name}.png`;
-                            }
-                            if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) {
-                              return img;
-                            }
-                            if (!/\.(png|jpe?g|webp|gif)$/i.test(img)) {
-                              img += '.png';
-                            }
-                            return `/web-barcode-pos/product-images/${img}`;
-                          })()} 
-                          alt={product.name} 
-                          className="catalog-card-img" 
-                          onError={() => setFailedImages(prev => ({ ...prev, [product.id]: true }))}
-                        />
-                      </div>
-                    ) : (
-                      <div className="catalog-card-emoji">{product.emoji}</div>
-                    )}
-                    <div className="catalog-card-name">{product.name}</div>
-                    <div style={{
-                      fontSize: '0.65rem',
-                      fontWeight: 600,
-                      color: 'var(--primary)',
-                      marginTop: '0.1rem',
-                      opacity: 0.8
-                    }}>
-                      🎨 {product.artist || "Unknown"}
-                    </div>
-                    
-                    {product.isSetPriced && (
-                      <div className="catalog-card-set-tag" style={{
+              {filteredCatalogProducts.length === 0 ? (
+                <div style={{
+                  gridColumn: '1 / -1',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '3rem 1rem',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)'
+                }}>
+                  <p style={{ fontSize: '0.9rem', fontWeight: 600 }}>No products match your active search or filters.</p>
+                  <p style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Try refining your search text or resetting the filters.</p>
+                </div>
+              ) : (
+                filteredCatalogProducts.map(product => {
+                  const isOutOfStock = product.stock === 0;
+                  return (
+                    <div 
+                      key={product.id} 
+                      className={`glass-panel glass-panel-hover catalog-card ${isOutOfStock ? 'disabled' : ''}`}
+                      onClick={() => handleProductClick(product)}
+                      style={{
+                        ...styles.cardClickReset,
+                        opacity: isOutOfStock ? 0.45 : 1,
+                        cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                        border: isOutOfStock ? '1px dashed var(--border-color)' : '1px solid var(--border-color)'
+                      }}
+                      title={isOutOfStock ? "Out of stock" : `Tap to add: ${product.name}`}
+                    >
+                      {!failedImages[product.id] ? (
+                        <div className="catalog-card-image-wrapper">
+                          <img 
+                            src={(() => {
+                              let img = product.image ? product.image.trim() : '';
+                              if (!img) {
+                                return `/web-barcode-pos/product-images/${product.name}.png`;
+                              }
+                              if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) {
+                                return img;
+                              }
+                              if (!/\.(png|jpe?g|webp|gif)$/i.test(img)) {
+                                img += '.png';
+                              }
+                              return `/web-barcode-pos/product-images/${img}`;
+                            })()} 
+                            alt={product.name} 
+                            className="catalog-card-img" 
+                            onError={() => setFailedImages(prev => ({ ...prev, [product.id]: true }))}
+                          />
+                        </div>
+                      ) : (
+                        <div className="catalog-card-emoji">{product.emoji}</div>
+                      )}
+                      <div className="catalog-card-name">{product.name}</div>
+                      <div style={{
                         fontSize: '0.65rem',
-                        fontWeight: 700,
-                        color: 'var(--success)',
-                        background: 'rgba(16, 185, 129, 0.08)',
-                        border: '1px solid rgba(16, 185, 129, 0.15)',
-                        borderRadius: '4px',
-                        padding: '0.1rem 0.35rem',
-                        marginTop: '0.2rem',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        maxWidth: '100%',
-                        cursor: 'help'
-                      }} title={`${product.setGroupName} Set`}>
-                        🏷️ {product.setGroupName}
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                      <div className="catalog-card-price">฿{product.price.toFixed(2)}</div>
-                      <div className="catalog-card-stock" style={{
-                        color: isOutOfStock ? 'var(--danger)' : product.stock < 5 ? 'var(--warning)' : 'var(--text-muted)'
+                        fontWeight: 600,
+                        color: 'var(--primary)',
+                        marginTop: '0.1rem',
+                        opacity: 0.8
                       }}>
-                        {isOutOfStock ? "Sold Out" : `${product.stock} left`}
+                        🎨 {product.artist || "Unknown"}
+                      </div>
+                      
+                      {product.isSetPriced && (
+                        <div className="catalog-card-set-tag" style={{
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          color: 'var(--success)',
+                          background: 'rgba(16, 185, 129, 0.08)',
+                          border: '1px solid rgba(16, 185, 129, 0.15)',
+                          borderRadius: '4px',
+                          padding: '0.1rem 0.35rem',
+                          marginTop: '0.2rem',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: '100%',
+                          cursor: 'help'
+                        }} title={`${product.setGroupName} Set`}>
+                          🏷️ {product.setGroupName}
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <div className="catalog-card-price">฿{product.price.toFixed(2)}</div>
+                        <div className="catalog-card-stock" style={{
+                          color: isOutOfStock ? 'var(--danger)' : product.stock < 5 ? 'var(--warning)' : 'var(--text-muted)'
+                        }}>
+                          {isOutOfStock ? "Sold Out" : `${product.stock} left`}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 
