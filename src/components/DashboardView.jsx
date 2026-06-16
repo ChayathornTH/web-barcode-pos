@@ -216,7 +216,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     const globalProds = Object.values(productSales);
     let globalHeroProductVal = null;
     if (globalProds.length > 0) {
-      globalProds.sort((a, b) => b.quantity - a.quantity || b.net - a.net);
+      globalProds.sort((a, b) => b.net - a.net || b.quantity - a.quantity);
       globalHeroProductVal = globalProds[0];
     }
 
@@ -305,7 +305,7 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     Object.keys(artistSales).forEach(artistName => {
       const artistProds = Object.values(productSales).filter(p => p.artist === artistName);
       if (artistProds.length > 0) {
-        artistProds.sort((a, b) => b.quantity - a.quantity || b.net - a.net);
+        artistProds.sort((a, b) => b.net - a.net || b.quantity - a.quantity);
         artistSales[artistName].heroProduct = artistProds[0];
       } else {
         artistSales[artistName].heroProduct = null;
@@ -331,6 +331,9 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       }))
       .sort((a, b) => b.net - a.net);
 
+    const sortedProductsVal = Object.values(productSales)
+      .sort((a, b) => b.net - a.net || b.quantity - a.quantity);
+
     return {
       totalRevenue: totalRevenueVal,
       totalTransactions: totalTransactionsVal,
@@ -342,7 +345,8 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       maxHourlySales: maxHourlySalesVal,
       sortedCategories: sortedCategoriesVal,
       sortedArtists: sortedArtistsVal,
-      globalHeroProduct: globalHeroProductVal
+      globalHeroProduct: globalHeroProductVal,
+      sortedProducts: sortedProductsVal
     };
   }, [salesHistory]);
 
@@ -357,7 +361,8 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     maxHourlySales,
     sortedCategories,
     sortedArtists,
-    globalHeroProduct
+    globalHeroProduct,
+    sortedProducts
   } = stats;
 
   const selectedArtistData = useMemo(() => {
@@ -411,6 +416,11 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       sale.items.some(item => (item.artist || 'Unknown') === selectedArtist)
     );
   }, [salesHistory, selectedArtist]);
+
+  const productsToRender = useMemo(() => {
+    if (selectedArtist === 'all') return sortedProducts;
+    return sortedProducts.filter(p => p.artist === selectedArtist);
+  }, [sortedProducts, selectedArtist]);
 
   // Export ledger list to CSV format
   const handleExportCSV = () => {
@@ -887,6 +897,51 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       </div>
 
       {/* Transaction History Table Ledger */}
+      {/* Item Sales Summary Card */}
+      <div className="glass-panel" style={styles.tableCard}>
+        <h3 style={styles.cardTitle}>
+          {selectedArtist === 'all' ? 'Item Sales Summary' : `Item Sales Summary for ${selectedArtist}`}
+        </h3>
+        
+        {productsToRender.length === 0 ? (
+          <div style={styles.emptyLedger}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No item sales recorded.</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.thRow}>
+                  <th style={styles.th}>Product</th>
+                  {selectedArtist === 'all' && <th style={styles.th}>Artist</th>}
+                  <th style={styles.th}>Category</th>
+                  <th style={styles.th}>Qty Sold</th>
+                  <th style={styles.th}>Gross Sales</th>
+                  <th style={styles.th}>Net Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productsToRender.map((prod) => (
+                  <tr key={prod.id} style={styles.tr}>
+                    <td style={{ ...styles.td, fontWeight: 700 }}>
+                      <span style={{ marginRight: '0.5rem', fontSize: '1.1rem' }}>{prod.emoji}</span>
+                      {prod.name}
+                    </td>
+                    {selectedArtist === 'all' && (
+                      <td style={styles.td}>🎨 {prod.artist}</td>
+                    )}
+                    <td style={styles.td}>{prod.category}</td>
+                    <td style={{ ...styles.td, fontWeight: 600 }}>{prod.quantity} pcs</td>
+                    <td style={styles.td}>฿{prod.gross.toFixed(2)}</td>
+                    <td style={{ ...styles.td, fontWeight: 800, color: 'var(--success)' }}>฿{prod.net.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <div className="glass-panel" style={styles.tableCard}>
         <h3 style={styles.cardTitle}>
           {selectedArtist === 'all' ? 'Transaction Ledger' : `Transaction Ledger for ${selectedArtist}`}
