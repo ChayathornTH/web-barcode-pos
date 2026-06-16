@@ -89,8 +89,25 @@ const calculateReceiptLineNets = (sale) => {
   });
 };
 
+// Helper to get artist specific share details in a single sale
+const getArtistShareInSale = (sale, artistName) => {
+  const lineNets = calculateReceiptLineNets(sale);
+  let net = 0;
+  let gross = 0;
+  let qty = 0;
+  lineNets.forEach(line => {
+    if ((line.item.artist || 'Unknown') === artistName) {
+      net += line.netShare;
+      gross += line.gross;
+      qty += line.item.quantity;
+    }
+  });
+  return { net, gross, qty };
+};
+
 export default function DashboardView({ salesHistory, onResetSalesHistory }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [selectedArtist, setSelectedArtist] = useState('all');
 
   // Stats & Distribution Calculations wrapped in useMemo for performance
   const stats = useMemo(() => {
@@ -101,6 +118,17 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       sum + sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0
     );
     const averageTicketVal = totalTransactionsVal > 0 ? totalRevenueVal / totalTransactionsVal : 0;
+
+    // Global Payment split
+    let globalCashTotalVal = 0;
+    let globalQrTotalVal = 0;
+    salesHistory.forEach(sale => {
+      if (sale.paymentMethod === 'cash') {
+        globalCashTotalVal += sale.total;
+      } else {
+        globalQrTotalVal += sale.total;
+      }
+    });
 
     // Group Sales by Hour for hourly chart
     const hourlyBucketsVal = Array.from({ length: 13 }, (_, i) => ({
@@ -160,18 +188,84 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       }))
       .sort((a, b) => b.amount - a.amount);
 
-    // Artist Distribution (Proportional Net Share Split)
+    // Artist Distribution (Proportional Net Share Split and Payment Method breakdown)
     const artistSales = {};
     salesHistory.forEach(sale => {
       const lineNets = calculateReceiptLineNets(sale);
+      const artistsInSale = new Set();
+
       lineNets.forEach(line => {
         const name = line.item.artist || 'Unknown';
+        artistsInSale.add(name);
+
         if (!artistSales[name]) {
-          artistSales[name] = { gross: 0, net: 0, quantity: 0 };
+          artistSales[name] = { 
+            gross: 0, 
+            net: 0, 
+            quantity: 0,
+            transactions: 0,
+            cashNet: 0,
+            cashGross: 0,
+            qrNet: 0,
+            qrGross: 0,
+            hourlySales: Array.from({ length: 13 }, (_, i) => ({
+              hour: i + 9,
+              label: `${i + 9 > 12 ? i + 9 - 12 : i + 9}${i + 9 >= 12 ? 'PM' : 'AM'}`,
+              amount: 0
+            })),
+            categorySales: {}
+          };
         }
         artistSales[name].gross += line.gross;
         artistSales[name].quantity += line.item.quantity;
         artistSales[name].net += line.netShare;
+
+        if (sale.paymentMethod === 'cash') {
+          artistSales[name].cashNet += line.netShare;
+          artistSales[name].cashGross += line.gross;
+        } else {
+          artistSales[name].qrNet += line.netShare;
+          artistSales[name].qrGross += line.gross;
+        }
+
+        // Hourly split per artist
+        let hour = 12;
+        try {
+          if (sale.timestamp) {
+            const cleaned = sale.timestamp.replace(',', '').trim();
+            const parts = cleaned.split(/\s+/);
+            const timeStr = parts[1] || parts[0];
+            if (timeStr && timeStr.includes(':')) {
+              const timeParts = timeStr.split(':');
+              let hr = parseInt(timeParts[0]);
+              const isPM = cleaned.toLowerCase().includes('pm');
+              const isAM = cleaned.toLowerCase().includes('am');
+              if (isPM && hr < 12) hr += 12;
+              if (isAM && hr === 12) hr = 0;
+              hour = hr;
+            }
+          }
+        } catch {
+          hour = 12;
+        }
+
+        const bucket = artistSales[name].hourlySales.find(b => b.hour === hour);
+        if (bucket) {
+          bucket.amount += line.netShare;
+        } else {
+          if (hour < 9) artistSales[name].hourlySales[0].amount += line.netShare;
+          else artistSales[name].hourlySales[12].amount += line.netShare;
+        }
+
+        // Category split per artist
+        artistSales[name].categorySales[line.item.category] = 
+          (artistSales[name].categorySales[line.item.category] || 0) + line.gross;
+      });
+
+      artistsInSale.forEach(name => {
+        if (artistSales[name]) {
+          artistSales[name].transactions += 1;
+        }
       });
     });
 
@@ -182,7 +276,14 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
         gross: data.gross,
         net: data.net,
         quantity: data.quantity,
-        percent: (data.net / totalArtistNetSales) * 100
+        percent: (data.net / totalArtistNetSales) * 100,
+        transactions: data.transactions,
+        cashNet: data.cashNet,
+        cashGross: data.cashGross,
+        qrNet: data.qrNet,
+        qrGross: data.qrGross,
+        hourlySales: data.hourlySales,
+        categorySales: data.categorySales
       }))
       .sort((a, b) => b.net - a.net);
 
@@ -191,6 +292,8 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       totalTransactions: totalTransactionsVal,
       totalItemsSold: totalItemsSoldVal,
       averageTicket: averageTicketVal,
+      globalCashTotal: globalCashTotalVal,
+      globalQrTotal: globalQrTotalVal,
       hourlyBuckets: hourlyBucketsVal,
       maxHourlySales: maxHourlySalesVal,
       sortedCategories: sortedCategoriesVal,
@@ -203,11 +306,60 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     totalTransactions,
     totalItemsSold,
     averageTicket,
+    globalCashTotal,
+    globalQrTotal,
     hourlyBuckets,
     maxHourlySales,
     sortedCategories,
     sortedArtists
   } = stats;
+
+  const selectedArtistData = useMemo(() => {
+    if (selectedArtist === 'all') return null;
+    return sortedArtists.find(a => a.artist === selectedArtist) || null;
+  }, [sortedArtists, selectedArtist]);
+
+  const artistStats = selectedArtistData || {
+    gross: 0,
+    net: 0,
+    quantity: 0,
+    transactions: 0,
+    cashNet: 0,
+    cashGross: 0,
+    qrNet: 0,
+    qrGross: 0,
+    hourlySales: [],
+    categorySales: {}
+  };
+
+  const hourlyBucketsToRender = selectedArtist === 'all'
+    ? hourlyBuckets
+    : (artistStats.hourlySales || []);
+
+  const maxHourlySalesToRender = selectedArtist === 'all'
+    ? maxHourlySales
+    : Math.max(...hourlyBucketsToRender.map(b => b.amount), 50);
+
+  const categoriesToRender = useMemo(() => {
+    if (selectedArtist === 'all') return sortedCategories;
+    
+    const artistCats = artistStats.categorySales || {};
+    const artistTotalCatSales = Object.values(artistCats).reduce((a, b) => a + b, 0) || 1;
+    return Object.entries(artistCats)
+      .map(([category, amount]) => ({
+        category,
+        amount,
+        percent: (amount / artistTotalCatSales) * 100
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [selectedArtist, sortedCategories, artistStats]);
+
+  const filteredSalesHistory = useMemo(() => {
+    if (selectedArtist === 'all') return salesHistory;
+    return salesHistory.filter(sale => 
+      sale.items.some(item => (item.artist || 'Unknown') === selectedArtist)
+    );
+  }, [salesHistory, selectedArtist]);
 
   // Export ledger list to CSV format
   const handleExportCSV = () => {
@@ -233,27 +385,36 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     ];
     
     const rows = [];
-    salesHistory.forEach(sale => {
+    const activeSales = selectedArtist === 'all' 
+      ? salesHistory 
+      : salesHistory.filter(sale => sale.items.some(item => (item.artist || 'Unknown') === selectedArtist));
+
+    activeSales.forEach(sale => {
       const lineNets = calculateReceiptLineNets(sale);
+      let artistLineIndex = 0;
       lineNets.forEach((line, index) => {
+        const lineArtist = line.item.artist || 'Unknown';
+        if (selectedArtist !== 'all' && lineArtist !== selectedArtist) return;
+
         rows.push([
           sale.id,
           sale.timestamp,
           line.item.name,
           line.item.category,
-          line.item.artist || 'Unknown',
+          lineArtist,
           line.item.quantity,
           line.item.price.toFixed(2),
           line.gross.toFixed(2),
           line.netShare.toFixed(2),
-          index === 0 ? (sale.stickerDiscount || 0).toFixed(2) : "0.00",
+          artistLineIndex === 0 ? (sale.stickerDiscount || 0).toFixed(2) : "0.00",
           sale.discount.code || "None",
-          index === 0 ? (sale.discount.amount || 0).toFixed(2) : "0.00",
-          index === 0 ? sale.total.toFixed(2) : "",
-          index === 0 ? (sale.paymentMethod || "Unknown") : "",
-          index === 0 ? (sale.cashReceived !== null && sale.cashReceived !== undefined ? sale.cashReceived.toFixed(2) : "") : "",
-          index === 0 ? (sale.changeAmount !== null && sale.changeAmount !== undefined ? sale.changeAmount.toFixed(2) : "") : ""
+          artistLineIndex === 0 ? (sale.discount.amount || 0).toFixed(2) : "0.00",
+          artistLineIndex === 0 ? sale.total.toFixed(2) : "",
+          artistLineIndex === 0 ? (sale.paymentMethod || "Unknown") : "",
+          artistLineIndex === 0 ? (sale.cashReceived !== null && sale.cashReceived !== undefined ? sale.cashReceived.toFixed(2) : "") : "",
+          artistLineIndex === 0 ? (sale.changeAmount !== null && sale.changeAmount !== undefined ? sale.changeAmount.toFixed(2) : "") : ""
         ]);
+        artistLineIndex++;
       });
     });
 
@@ -262,7 +423,8 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `artfest_sales_ledger_${new Date().toISOString().split('T')[0]}.csv`);
+    const artistSuffix = selectedArtist === 'all' ? '' : `_${selectedArtist.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    link.setAttribute("download", `artfest_sales_ledger${artistSuffix}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -298,62 +460,186 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
         </div>
       </div>
 
+      {/* Artist Filter Control Panel */}
+      <div className="glass-panel" style={styles.filterBar}>
+        <div style={styles.filterLabelGroup}>
+          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            🎨 Filter by Artist:
+          </span>
+          <select 
+            value={selectedArtist} 
+            onChange={(e) => setSelectedArtist(e.target.value)}
+            className="custom-input"
+            style={styles.filterSelect}
+          >
+            <option value="all">All Artists (Full Dashboard)</option>
+            {sortedArtists.map(a => (
+              <option key={a.artist} value={a.artist}>
+                {a.artist} (฿{a.net.toFixed(2)})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Quick select artist tags (chips) */}
+        {sortedArtists.length > 0 && (
+          <div style={styles.tagsContainer}>
+            <button 
+              onClick={() => setSelectedArtist('all')}
+              style={{
+                ...styles.tagButton,
+                backgroundColor: selectedArtist === 'all' ? 'var(--primary)' : 'rgba(255,255,255,0.03)',
+                borderColor: selectedArtist === 'all' ? 'var(--primary)' : 'var(--border-color)',
+                color: selectedArtist === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              }}
+            >
+              All
+            </button>
+            {sortedArtists.slice(0, 6).map(a => (
+              <button 
+                key={a.artist}
+                onClick={() => setSelectedArtist(a.artist)}
+                style={{
+                  ...styles.tagButton,
+                  backgroundColor: selectedArtist === a.artist ? 'var(--primary)' : 'rgba(255,255,255,0.03)',
+                  borderColor: selectedArtist === a.artist ? 'var(--primary)' : 'var(--border-color)',
+                  color: selectedArtist === a.artist ? 'var(--text-primary)' : 'var(--text-secondary)',
+                }}
+              >
+                {a.artist}
+              </button>
+            ))}
+            {sortedArtists.length > 6 && (
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', alignSelf: 'center', marginLeft: '0.5rem' }}>
+                +{sortedArtists.length - 6} more
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Numerical Stats Cards */}
       <div className="stats-grid">
-        
-        <div className="glass-panel" style={styles.statCard}>
-          <div style={styles.statHeader}>
-            <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(139, 92, 246, 0.1)', color: 'var(--primary)' }}>
-              <DollarSign size={20} />
+        {selectedArtist === 'all' ? (
+          <>
+            <div className="glass-panel" style={styles.statCard}>
+              <div style={styles.statHeader}>
+                <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(139, 92, 246, 0.1)', color: 'var(--primary)' }}>
+                  <DollarSign size={20} />
+                </div>
+                <span style={styles.statLabel}>Total Revenue</span>
+              </div>
+              <div style={styles.statValue}>฿{totalRevenue.toFixed(2)}</div>
+              <div style={styles.statTrend}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                  💵 Cash: ฿{globalCashTotal.toFixed(2)} | 📱 QR: ฿{globalQrTotal.toFixed(2)}
+                </span>
+              </div>
             </div>
-            <span style={styles.statLabel}>Total Revenue</span>
-          </div>
-          <div style={styles.statValue}>฿{totalRevenue.toFixed(2)}</div>
-          <div style={styles.statTrend}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Gross sales ledger</span>
-          </div>
-        </div>
 
-        <div className="glass-panel" style={styles.statCard}>
-          <div style={styles.statHeader}>
-            <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(6, 182, 212, 0.1)', color: 'var(--accent)' }}>
-              <FileText size={20} />
+            <div className="glass-panel" style={styles.statCard}>
+              <div style={styles.statHeader}>
+                <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(6, 182, 212, 0.1)', color: 'var(--accent)' }}>
+                  <FileText size={20} />
+                </div>
+                <span style={styles.statLabel}>Transactions</span>
+              </div>
+              <div style={styles.statValue}>{totalTransactions}</div>
+              <div style={styles.statTrend}>
+                <ArrowUpRight size={14} color="var(--success)" />
+                <span style={{ color: 'var(--success)', fontWeight: 600 }}>Active session</span>
+              </div>
             </div>
-            <span style={styles.statLabel}>Transactions</span>
-          </div>
-          <div style={styles.statValue}>{totalTransactions}</div>
-          <div style={styles.statTrend}>
-            <ArrowUpRight size={14} color="var(--success)" />
-            <span style={{ color: 'var(--success)', fontWeight: 600 }}>Active session</span>
-          </div>
-        </div>
 
-        <div className="glass-panel" style={styles.statCard}>
-          <div style={styles.statHeader}>
-            <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
-              <ShoppingBag size={20} />
+            <div className="glass-panel" style={styles.statCard}>
+              <div style={styles.statHeader}>
+                <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
+                  <ShoppingBag size={20} />
+                </div>
+                <span style={styles.statLabel}>Items Sold</span>
+              </div>
+              <div style={styles.statValue}>{totalItemsSold}</div>
+              <div style={styles.statTrend}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Avg: {(totalItemsSold / (totalTransactions || 1)).toFixed(1)} / tickets</span>
+              </div>
             </div>
-            <span style={styles.statLabel}>Items Sold</span>
-          </div>
-          <div style={styles.statValue}>{totalItemsSold}</div>
-          <div style={styles.statTrend}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Avg: {(totalItemsSold / (totalTransactions || 1)).toFixed(1)} / tickets</span>
-          </div>
-        </div>
 
-        <div className="glass-panel" style={styles.statCard}>
-          <div style={styles.statHeader}>
-            <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
-              <TrendingUp size={20} />
+            <div className="glass-panel" style={styles.statCard}>
+              <div style={styles.statHeader}>
+                <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
+                  <TrendingUp size={20} />
+                </div>
+                <span style={styles.statLabel}>Avg Ticket</span>
+              </div>
+              <div style={styles.statValue}>฿{averageTicket.toFixed(2)}</div>
+              <div style={styles.statTrend}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Total basket value avg</span>
+              </div>
             </div>
-            <span style={styles.statLabel}>Avg Ticket</span>
-          </div>
-          <div style={styles.statValue}>฿{averageTicket.toFixed(2)}</div>
-          <div style={styles.statTrend}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Total basket value avg</span>
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="glass-panel" style={styles.statCard}>
+              <div style={styles.statHeader}>
+                <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(139, 92, 246, 0.1)', color: 'var(--primary)' }}>
+                  <DollarSign size={20} />
+                </div>
+                <span style={styles.statLabel}>Artist Net Revenue</span>
+              </div>
+              <div style={styles.statValue}>฿{artistStats.net.toFixed(2)}</div>
+              <div style={styles.statTrend}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                  Gross sales: ฿{artistStats.gross.toFixed(2)}
+                </span>
+              </div>
+            </div>
 
+            <div className="glass-panel" style={styles.statCard}>
+              <div style={styles.statHeader}>
+                <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(6, 182, 212, 0.1)', color: 'var(--accent)' }}>
+                  <FileText size={20} />
+                </div>
+                <span style={styles.statLabel}>Transactions</span>
+              </div>
+              <div style={styles.statValue}>{artistStats.transactions}</div>
+              <div style={styles.statTrend}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                  {artistStats.quantity} items sold
+                </span>
+              </div>
+            </div>
+
+            <div className="glass-panel" style={styles.statCard}>
+              <div style={styles.statHeader}>
+                <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
+                  <span style={{ fontSize: '1.2rem' }}>💵</span>
+                </div>
+                <span style={styles.statLabel}>Cash Share (Net)</span>
+              </div>
+              <div style={styles.statValue}>฿{artistStats.cashNet.toFixed(2)}</div>
+              <div style={styles.statTrend}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                  Gross Cash: ฿{artistStats.cashGross.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="glass-panel" style={styles.statCard}>
+              <div style={styles.statHeader}>
+                <div style={{ ...styles.statIconWrapper, backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
+                  <span style={{ fontSize: '1.2rem' }}>📱</span>
+                </div>
+                <span style={styles.statLabel}>QR Share (Net)</span>
+              </div>
+              <div style={styles.statValue}>฿{artistStats.qrNet.toFixed(2)}</div>
+              <div style={styles.statTrend}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                  Gross QR: ฿{artistStats.qrGross.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Visual Charts Grid */}
@@ -361,13 +647,15 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
         
         {/* Hourly sales distribution (Custom SVG) */}
         <div className="glass-panel" style={styles.chartCard}>
-          <h3 style={styles.cardTitle}>Hourly Sales (฿)</h3>
+          <h3 style={styles.cardTitle}>
+            {selectedArtist === 'all' ? 'Hourly Sales (฿)' : `Hourly Sales for ${selectedArtist} (฿)`}
+          </h3>
           
           <div style={styles.svgContainer}>
             <svg width="100%" height="220" style={{ overflow: 'visible' }}>
               {[0, 0.25, 0.5, 0.75, 1].map((ratio, index) => {
                 const y = 180 - ratio * 150;
-                const value = Math.round(maxHourlySales * ratio);
+                const value = Math.round(maxHourlySalesToRender * ratio);
                 return (
                   <g key={index}>
                     <line x1="40" y1={y} x2="100%" y2={y} stroke="var(--border-color)" strokeDasharray="4 4" />
@@ -376,10 +664,10 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                 );
               })}
 
-              {hourlyBuckets.map((bucket, index) => {
+              {hourlyBucketsToRender.map((bucket, index) => {
                 const barWidth = 14; 
                 const x = 45 + index * 26; 
-                const barHeight = (bucket.amount / maxHourlySales) * 150;
+                const barHeight = (bucket.amount / maxHourlySalesToRender) * 150;
                 const y = 180 - barHeight;
                 const isHovered = bucket.amount > 0;
 
@@ -433,15 +721,17 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
 
         {/* Category distribution */}
         <div className="glass-panel" style={styles.chartCard}>
-          <h3 style={styles.cardTitle}>Sales by Department</h3>
+          <h3 style={styles.cardTitle}>
+            {selectedArtist === 'all' ? 'Sales by Department' : `Department Sales for ${selectedArtist}`}
+          </h3>
           
-          {sortedCategories.length === 0 ? (
+          {categoriesToRender.length === 0 ? (
             <div style={styles.emptyCategories}>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No inventory categories sold yet.</p>
             </div>
           ) : (
             <div style={styles.categoryList}>
-              {sortedCategories.map((cat, idx) => (
+              {categoriesToRender.map((cat, idx) => (
                 <div key={idx} style={styles.categoryRow}>
                   <div style={styles.categoryMeta}>
                     <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{cat.category}</span>
@@ -472,27 +762,39 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
             </div>
           ) : (
             <div style={styles.categoryList}>
-              {sortedArtists.map((art, idx) => (
-                <div key={idx} style={styles.categoryRow}>
-                  <div style={styles.categoryMeta}>
-                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>🎨 {art.artist}</span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-                      Net: ฿{art.net.toFixed(2)} (Gross: ฿{art.gross.toFixed(2)})
-                    </span>
+              {sortedArtists.map((art, idx) => {
+                const isSelected = selectedArtist === art.artist;
+                return (
+                  <div 
+                    key={idx} 
+                    style={{
+                      ...styles.categoryRow,
+                      padding: isSelected ? '0.5rem' : '0',
+                      borderRadius: isSelected ? '8px' : '0',
+                      border: isSelected ? '1px solid var(--primary)' : 'none',
+                      backgroundColor: isSelected ? 'rgba(139, 92, 246, 0.05)' : 'transparent',
+                    }}
+                  >
+                    <div style={styles.categoryMeta}>
+                      <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>🎨 {art.artist}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                        Net: ฿{art.net.toFixed(2)} (Gross: ฿{art.gross.toFixed(2)})
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
+                      <span>{art.quantity} items sold</span>
+                      <span>{Math.round(art.percent)}% share</span>
+                    </div>
+                    <div style={styles.barTrack}>
+                      <div style={{
+                        ...styles.barFill,
+                        width: `${art.percent}%`,
+                        backgroundColor: idx % 3 === 0 ? 'var(--accent)' : idx % 3 === 1 ? 'var(--primary)' : 'var(--success)'
+                      }}></div>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
-                    <span>{art.quantity} items sold</span>
-                    <span>{Math.round(art.percent)}% share</span>
-                  </div>
-                  <div style={styles.barTrack}>
-                    <div style={{
-                      ...styles.barFill,
-                      width: `${art.percent}%`,
-                      backgroundColor: idx % 3 === 0 ? 'var(--accent)' : idx % 3 === 1 ? 'var(--primary)' : 'var(--success)'
-                    }}></div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -501,9 +803,11 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
 
       {/* Transaction History Table Ledger */}
       <div className="glass-panel" style={styles.tableCard}>
-        <h3 style={styles.cardTitle}>Transaction Ledger</h3>
+        <h3 style={styles.cardTitle}>
+          {selectedArtist === 'all' ? 'Transaction Ledger' : `Transaction Ledger for ${selectedArtist}`}
+        </h3>
         
-        {salesHistory.length === 0 ? (
+        {filteredSalesHistory.length === 0 ? (
           <div style={styles.emptyLedger}>
             <Calendar size={32} color="var(--text-muted)" style={{ opacity: 0.4, marginBottom: '0.5rem' }} />
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No transactions recorded.</p>
@@ -518,19 +822,25 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                   <th style={styles.th}>Date & Time</th>
                   <th style={styles.th}>Items</th>
                   <th style={styles.th}>Discount</th>
+                  {selectedArtist !== 'all' && <th style={styles.th}>Artist Share (Net)</th>}
                   <th style={styles.th}>Total</th>
                   <th style={{ ...styles.th, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {salesHistory.map((sale) => {
+                {filteredSalesHistory.map((sale) => {
                   const qty = sale.items.reduce((s, i) => s + i.quantity, 0);
                   const totalDiscount = (sale.discount?.amount || 0) + (sale.stickerDiscount || 0);
+                  const artistShare = selectedArtist !== 'all' ? getArtistShareInSale(sale, selectedArtist) : null;
                   return (
                     <tr key={sale.id} style={styles.tr}>
                       <td style={{ ...styles.td, fontWeight: 700 }}>{sale.id}</td>
                       <td style={styles.td}>{sale.timestamp}</td>
-                      <td style={styles.td}>{qty} items</td>
+                      <td style={styles.td}>
+                        {selectedArtist === 'all' 
+                          ? `${qty} items` 
+                          : `${artistShare.qty} of ${qty} items`}
+                      </td>
                       <td style={styles.td}>
                         {totalDiscount > 0 ? (
                           <span style={styles.discountBadge}>-฿{totalDiscount.toFixed(2)}</span>
@@ -538,6 +848,11 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
                           <span style={{ color: 'var(--text-muted)' }}>None</span>
                         )}
                       </td>
+                      {selectedArtist !== 'all' && (
+                        <td style={{ ...styles.td, fontWeight: 800, color: 'var(--primary)' }}>
+                          ฿{artistShare.net.toFixed(2)}
+                        </td>
+                      )}
                       <td style={{ ...styles.td, fontWeight: 800, color: 'var(--success)' }}>
                         ฿{sale.total.toFixed(2)}
                       </td>
@@ -943,5 +1258,39 @@ const styles = {
   receiptFooter: {
     textAlign: 'center',
     marginTop: '0.5rem',
+  },
+  filterBar: {
+    padding: '1rem 1.25rem',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+    flexWrap: 'wrap',
+  },
+  filterLabelGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+  },
+  filterSelect: {
+    padding: '0.5rem 2.2rem 0.5rem 1rem',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    minWidth: '220px',
+  },
+  tagsContainer: {
+    display: 'flex',
+    gap: '0.5rem',
+    flexWrap: 'wrap',
+  },
+  tagButton: {
+    padding: '0.35rem 0.75rem',
+    borderRadius: '20px',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid transparent',
+    transition: 'all var(--transition-fast)',
+    outline: 'none',
   }
 };
