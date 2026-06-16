@@ -188,6 +188,38 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       }))
       .sort((a, b) => b.amount - a.amount);
 
+    // Product sales tracking
+    const productSales = {};
+    salesHistory.forEach(sale => {
+      const lineNets = calculateReceiptLineNets(sale);
+      lineNets.forEach(line => {
+        const prodId = line.item.id;
+        if (!productSales[prodId]) {
+          productSales[prodId] = {
+            id: prodId,
+            name: line.item.name,
+            emoji: line.item.emoji || '📦',
+            artist: line.item.artist || 'Unknown',
+            category: line.item.category,
+            quantity: 0,
+            gross: 0,
+            net: 0
+          };
+        }
+        productSales[prodId].quantity += line.item.quantity;
+        productSales[prodId].gross += line.gross;
+        productSales[prodId].net += line.netShare;
+      });
+    });
+
+    // Calculate global hero product
+    const globalProds = Object.values(productSales);
+    let globalHeroProductVal = null;
+    if (globalProds.length > 0) {
+      globalProds.sort((a, b) => b.quantity - a.quantity || b.net - a.net);
+      globalHeroProductVal = globalProds[0];
+    }
+
     // Artist Distribution (Proportional Net Share Split and Payment Method breakdown)
     const artistSales = {};
     salesHistory.forEach(sale => {
@@ -269,6 +301,17 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       });
     });
 
+    // Calculate hero product per artist
+    Object.keys(artistSales).forEach(artistName => {
+      const artistProds = Object.values(productSales).filter(p => p.artist === artistName);
+      if (artistProds.length > 0) {
+        artistProds.sort((a, b) => b.quantity - a.quantity || b.net - a.net);
+        artistSales[artistName].heroProduct = artistProds[0];
+      } else {
+        artistSales[artistName].heroProduct = null;
+      }
+    });
+
     const totalArtistNetSales = Object.values(artistSales).reduce((a, b) => a + b.net, 0) || 1;
     const sortedArtistsVal = Object.entries(artistSales)
       .map(([artist, data]) => ({
@@ -283,7 +326,8 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
         qrNet: data.qrNet,
         qrGross: data.qrGross,
         hourlySales: data.hourlySales,
-        categorySales: data.categorySales
+        categorySales: data.categorySales,
+        heroProduct: data.heroProduct
       }))
       .sort((a, b) => b.net - a.net);
 
@@ -297,7 +341,8 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
       hourlyBuckets: hourlyBucketsVal,
       maxHourlySales: maxHourlySalesVal,
       sortedCategories: sortedCategoriesVal,
-      sortedArtists: sortedArtistsVal
+      sortedArtists: sortedArtistsVal,
+      globalHeroProduct: globalHeroProductVal
     };
   }, [salesHistory]);
 
@@ -311,7 +356,8 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     hourlyBuckets,
     maxHourlySales,
     sortedCategories,
-    sortedArtists
+    sortedArtists,
+    globalHeroProduct
   } = stats;
 
   const selectedArtistData = useMemo(() => {
@@ -329,8 +375,13 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     qrNet: 0,
     qrGross: 0,
     hourlySales: [],
-    categorySales: {}
+    categorySales: {},
+    heroProduct: null
   };
+
+  const heroProductToShow = selectedArtist === 'all'
+    ? globalHeroProduct
+    : artistStats.heroProduct;
 
   const hourlyBucketsToRender = selectedArtist === 'all'
     ? hourlyBuckets
@@ -641,6 +692,40 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
           </>
         )}
       </div>
+
+      {/* Hero Product Spotlight Banner */}
+      {heroProductToShow && (
+        <div className="glass-panel glow-primary" style={styles.heroBanner}>
+          <div style={styles.heroLeft}>
+            <div style={styles.heroBadge}>
+              <span>🌟 HERO PRODUCT</span>
+            </div>
+            <h3 style={styles.heroTitle}>
+              <span style={{ fontSize: '1.8rem', marginRight: '0.5rem' }}>{heroProductToShow.emoji}</span>
+              {heroProductToShow.name}
+            </h3>
+            <p style={styles.heroSubtitle}>
+              Artist: <span style={{ color: 'var(--primary)', fontWeight: 700 }}>{heroProductToShow.artist}</span> | Category: {heroProductToShow.category}
+            </p>
+          </div>
+          <div style={styles.heroRight}>
+            <div style={styles.heroStatItem}>
+              <span style={styles.heroStatLabel}>Units Sold</span>
+              <span style={styles.heroStatVal}>{heroProductToShow.quantity} units</span>
+            </div>
+            <div style={{ width: '1px', height: '35px', backgroundColor: 'var(--border-color)', alignSelf: 'center' }}></div>
+            <div style={styles.heroStatItem}>
+              <span style={styles.heroStatLabel}>Net Revenue</span>
+              <span style={{ ...styles.heroStatVal, color: 'var(--success)' }}>฿{heroProductToShow.net.toFixed(2)}</span>
+            </div>
+            <div style={{ width: '1px', height: '35px', backgroundColor: 'var(--border-color)', alignSelf: 'center' }}></div>
+            <div style={styles.heroStatItem}>
+              <span style={styles.heroStatLabel}>Avg Price</span>
+              <span style={styles.heroStatVal}>฿{(heroProductToShow.gross / heroProductToShow.quantity).toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Visual Charts Grid */}
       <div className="charts-grid">
@@ -1292,5 +1377,64 @@ const styles = {
     border: '1px solid transparent',
     transition: 'all var(--transition-fast)',
     outline: 'none',
+  },
+  heroBanner: {
+    padding: '1.25rem 1.75rem',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1.5rem',
+    flexWrap: 'wrap',
+    background: 'radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.1) 0px, var(--glass-bg) 50%)',
+    borderColor: 'rgba(139, 92, 246, 0.2)',
+  },
+  heroLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.4rem',
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'var(--primary-glow)',
+    border: '1px solid var(--primary)',
+    borderRadius: '4px',
+    padding: '0.15rem 0.4rem',
+    fontSize: '0.65rem',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+    letterSpacing: '0.05em',
+  },
+  heroTitle: {
+    fontSize: '1.3rem',
+    fontWeight: 800,
+    color: 'var(--text-primary)',
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+  },
+  heroSubtitle: {
+    fontSize: '0.85rem',
+    color: 'var(--text-secondary)',
+    margin: 0,
+  },
+  heroRight: {
+    display: 'flex',
+    gap: '1.5rem',
+    flexWrap: 'wrap',
+  },
+  heroStatItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.2rem',
+  },
+  heroStatLabel: {
+    fontSize: '0.75rem',
+    color: 'var(--text-muted)',
+    fontWeight: 600,
+  },
+  heroStatVal: {
+    fontSize: '1.1rem',
+    fontWeight: 800,
+    color: 'var(--text-primary)',
   }
 };
