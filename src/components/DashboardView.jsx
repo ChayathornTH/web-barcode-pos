@@ -108,6 +108,9 @@ const getArtistShareInSale = (sale, artistName) => {
 export default function DashboardView({ salesHistory, onResetSalesHistory }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [selectedArtist, setSelectedArtist] = useState('all');
+  const [productSearch, setProductSearch] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('all');
+  const [productSortBy, setProductSortBy] = useState('net-desc');
 
   // Stats & Distribution Calculations wrapped in useMemo for performance
   const stats = useMemo(() => {
@@ -417,10 +420,51 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
     );
   }, [salesHistory, selectedArtist]);
 
-  const productsToRender = useMemo(() => {
-    if (selectedArtist === 'all') return sortedProducts;
-    return sortedProducts.filter(p => p.artist === selectedArtist);
+  const productCategories = useMemo(() => {
+    const activeProducts = selectedArtist === 'all'
+      ? sortedProducts
+      : sortedProducts.filter(p => p.artist === selectedArtist);
+    const cats = new Set(activeProducts.map(p => p.category));
+    return Array.from(cats);
   }, [sortedProducts, selectedArtist]);
+
+  const productsToRender = useMemo(() => {
+    let items = sortedProducts;
+    
+    // 1. Filter by artist if needed
+    if (selectedArtist !== 'all') {
+      items = items.filter(p => p.artist === selectedArtist);
+    }
+    
+    // 2. Filter by Category
+    if (productCategoryFilter !== 'all') {
+      items = items.filter(p => p.category === productCategoryFilter);
+    }
+    
+    // 3. Filter by Search Query
+    if (productSearch.trim() !== '') {
+      const query = productSearch.toLowerCase();
+      items = items.filter(p => p.name.toLowerCase().includes(query));
+    }
+    
+    // 4. Sort
+    const sorted = [...items];
+    if (productSortBy === 'net-desc') {
+      sorted.sort((a, b) => b.net - a.net || b.quantity - a.quantity);
+    } else if (productSortBy === 'net-asc') {
+      sorted.sort((a, b) => a.net - b.net || a.quantity - b.quantity);
+    } else if (productSortBy === 'qty-desc') {
+      sorted.sort((a, b) => b.quantity - a.quantity || b.net - a.net);
+    } else if (productSortBy === 'qty-asc') {
+      sorted.sort((a, b) => a.quantity - b.quantity || a.net - b.net);
+    } else if (productSortBy === 'name-asc') {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (productSortBy === 'name-desc') {
+      sorted.sort((a, b) => b.name.localeCompare(a.name));
+    }
+    
+    return sorted;
+  }, [sortedProducts, selectedArtist, productCategoryFilter, productSearch, productSortBy]);
 
   // Export ledger list to CSV format
   const handleExportCSV = () => {
@@ -903,9 +947,55 @@ export default function DashboardView({ salesHistory, onResetSalesHistory }) {
           {selectedArtist === 'all' ? 'Item Sales Summary' : `Item Sales Summary for ${selectedArtist}`}
         </h3>
         
+        {/* Item Summary Table Controls */}
+        <div style={styles.tableControlsBar}>
+          <input 
+            type="text"
+            placeholder="🔍 Search items by name..."
+            value={productSearch}
+            onChange={(e) => setProductSearch(e.target.value)}
+            className="custom-input"
+            style={styles.searchControl}
+          />
+          
+          <div style={styles.controlGroupRight}>
+            <div style={styles.controlItem}>
+              <span style={styles.controlItemLabel}>Category:</span>
+              <select
+                value={productCategoryFilter}
+                onChange={(e) => setProductCategoryFilter(e.target.value)}
+                className="custom-input"
+                style={styles.dropdownControl}
+              >
+                <option value="all">All Categories</option>
+                {productCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.controlItem}>
+              <span style={styles.controlItemLabel}>Sort By:</span>
+              <select
+                value={productSortBy}
+                onChange={(e) => setProductSortBy(e.target.value)}
+                className="custom-input"
+                style={styles.dropdownControl}
+              >
+                <option value="net-desc">Net Share: High to Low</option>
+                <option value="net-asc">Net Share: Low to High</option>
+                <option value="qty-desc">Qty Sold: High to Low</option>
+                <option value="qty-asc">Qty Sold: Low to High</option>
+                <option value="name-asc">Product Name: A to Z</option>
+                <option value="name-desc">Product Name: Z to A</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         {productsToRender.length === 0 ? (
           <div style={styles.emptyLedger}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No item sales recorded.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No item sales matching active filters.</p>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -1491,5 +1581,40 @@ const styles = {
     fontSize: '1.1rem',
     fontWeight: 800,
     color: 'var(--text-primary)',
+  },
+  tableControlsBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+    flexWrap: 'wrap',
+    marginBottom: '1.25rem',
+    paddingBottom: '1rem',
+    borderBottom: '1px dashed var(--border-color)',
+  },
+  searchControl: {
+    padding: '0.45rem 1rem',
+    fontSize: '0.85rem',
+    flex: '1 1 250px',
+  },
+  controlGroupRight: {
+    display: 'flex',
+    gap: '1rem',
+    flexWrap: 'wrap',
+  },
+  controlItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+  },
+  controlItemLabel: {
+    fontSize: '0.8rem',
+    color: 'var(--text-secondary)',
+    fontWeight: 600,
+  },
+  dropdownControl: {
+    padding: '0.45rem 2.2rem 0.45rem 1rem',
+    fontSize: '0.85rem',
+    cursor: 'pointer',
   }
 };
