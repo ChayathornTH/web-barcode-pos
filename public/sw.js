@@ -1,4 +1,4 @@
-const CACHE_NAME = 'omniscan-pos-v1';
+const CACHE_NAME = 'omniscan-pos-v2';
 const PRECACHE_ASSETS = [
   './',
   './index.html',
@@ -43,7 +43,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first with Cache fallback strategy
+  // Network-first for navigation requests (HTML page) so updates are immediate
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          return caches.match('./') || caches.match('./index.html');
+        })
+    );
+    return;
+  }
+
+  // Network-first with Cache fallback for assets
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
@@ -59,10 +79,6 @@ self.addEventListener('fetch', (event) => {
         const cachedResponse = await caches.match(event.request);
         if (cachedResponse) {
           return cachedResponse;
-        }
-        // If navigating to an HTML page while offline, return cached root/index
-        if (event.request.mode === 'navigate') {
-          return caches.match('./') || caches.match('./index.html');
         }
         return new Response('Network error and asset not cached', {
           status: 503,
