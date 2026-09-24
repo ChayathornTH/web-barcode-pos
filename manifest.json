@@ -1,0 +1,57 @@
+{
+  "name": "OmniScan POS",
+  "short_name": "OmniScan",
+  "description": "Advanced Barcode Checkout & Inventory Point of Sale System",
+  "start_url": "/web-barcode-pos/",
+  "scope": "/web-barcode-pos/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "theme_color": "#07090e",
+  "background_color": "#07090e",
+  "categories": ["business", "finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-167.png",
+      "sizes": "167x167",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
