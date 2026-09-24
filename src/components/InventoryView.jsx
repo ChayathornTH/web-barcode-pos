@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Trash2, Edit3, X, Barcode as BarcodeIcon, RotateCcw, AlertTriangle, Copy, Upload, Download, FileSpreadsheet, Clipboard, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, X, Barcode as BarcodeIcon, RotateCcw, AlertTriangle, Copy, Upload, Download, FileSpreadsheet, Clipboard, CheckCircle2, Loader2 } from 'lucide-react';
+import { getProductImageUrl, compressImage } from '../utils/imageUtils';
 
 
 const CATEGORIES = [
@@ -54,12 +55,14 @@ const getEmojiForProduct = (name, category) => {
   }
 };
 
-export default function InventoryView({ products, onAddProduct, onUpdateProduct, onDeleteProduct, onSimulateScan, onResetInventory, onImportProducts }) {
+export default function InventoryView({ products, boothId = '', onAddProduct, onUpdateProduct, onDeleteProduct, onSimulateScan, onResetInventory, onClearInventory, onImportProducts }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [failedImages, setFailedImages] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadStatus, setImageUploadStatus] = useState('');
 
   // Bulk Catalog Tool States
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -486,6 +489,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setTier2Price(getPriceVal(tiers[1]));
     setTier3Qty(tiers[2]?.quantity?.toString() || '');
     setTier3Price(getPriceVal(tiers[2]));
+    setImageUploadStatus('');
+    setIsUploadingImage(false);
     setIsModalOpen(true);
   };
 
@@ -510,6 +515,8 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setTier3Qty('');
     setTier3Price('');
     setFormError('');
+    setImageUploadStatus('');
+    setIsUploadingImage(false);
     setIsModalOpen(true);
   };
 
@@ -558,18 +565,29 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
     setBarcode(random12Digits + checksum);
   };
 
-  const handleImageFileChange = (e) => {
+  const handleImageFileChange = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setFormError('Image size must be less than 2MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      setFormError('Image size must be less than 15MB');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setImageUploadStatus('Optimizing image for local storage...');
+    setFormError('');
+
+    try {
+      // Compress client-side to an ultra-light thumbnail (~6-12 KB) for instant offline speed
+      const { dataUrl, sizeKB } = await compressImage(file, 240, 240, 0.70);
+      setImage(dataUrl);
+      setImageUploadStatus(`✓ Optimized for offline speed (${sizeKB || '8'} KB)`);
+    } catch (err) {
+      console.error('Image processing error:', err);
+      setFormError('Failed to process image: ' + err.message);
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -708,7 +726,15 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
             Manage barcode catalog, update stock levels, and simulate scans.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button 
+            className="btn btn-secondary" 
+            onClick={onClearInventory} 
+            title="Clear all products from inventory"
+            style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+          >
+            <Trash2 size={16} /> Clear All
+          </button>
           <button className="btn btn-secondary" onClick={onResetInventory} title="Reset database to default items">
             <RotateCcw size={16} /> Reset Default
           </button>
@@ -797,25 +823,16 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
           filteredProducts.map(product => (
             <div key={product.id} className="glass-panel glass-panel-hover" style={styles.productCard}>
               <div style={styles.cardHeader}>
-                {!failedImages[product.id] ? (
+                {!failedImages[`${product.id}_${product.image || ''}`] ? (
                   <div style={styles.imageContainer}>
                     <img 
-                      src={(() => {
-                        let img = product.image ? product.image.trim() : '';
-                        if (!img) {
-                          return `/web-barcode-pos/product-images/${product.name}.png`;
-                        }
-                        if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) {
-                          return img;
-                        }
-                        if (!/\.(png|jpe?g|webp|gif)$/i.test(img)) {
-                          img += '.png';
-                        }
-                        return `/web-barcode-pos/product-images/${img}`;
-                      })()} 
+                      key={`${product.id}_${product.image || ''}`}
+                      src={getProductImageUrl(product.image, product.name, product.id)} 
                       alt={product.name} 
                       style={styles.productCardImage} 
-                      onError={() => setFailedImages(prev => ({ ...prev, [product.id]: true }))}
+                      loading="lazy"
+                      decoding="async"
+                      onError={() => setFailedImages(prev => ({ ...prev, [`${product.id}_${product.image || ''}`]: true }))}
                     />
                   </div>
                 ) : (
@@ -1134,16 +1151,7 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                   {image && (
                     <div style={styles.imagePreviewContainer}>
                       <img 
-                        src={(() => {
-                          let img = image.trim();
-                          if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) {
-                            return img;
-                          }
-                          if (!/\.(png|jpe?g|webp|gif)$/i.test(img)) {
-                            img += '.png';
-                          }
-                          return `/web-barcode-pos/product-images/${img}`;
-                        })()} 
+                        src={getProductImageUrl(image)} 
                         alt="Preview" 
                         style={styles.imagePreview} 
                       />
@@ -1164,27 +1172,46 @@ export default function InventoryView({ products, onAddProduct, onUpdateProduct,
                       onChange={handleImageFileChange} 
                       style={{ display: 'none' }}
                       id="product-image-file"
+                      disabled={isUploadingImage}
                     />
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <label 
                         htmlFor="product-image-file" 
                         className="btn btn-secondary" 
-                        style={{ cursor: 'pointer', padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                        style={{ 
+                          cursor: isUploadingImage ? 'not-allowed' : 'pointer', 
+                          padding: '0.5rem 0.75rem', 
+                          fontSize: '0.85rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          opacity: isUploadingImage ? 0.7 : 1
+                        }}
                       >
-                        Upload Image
+                        {isUploadingImage ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={14} />}
+                        {isUploadingImage ? 'Processing...' : 'Upload Image'}
                       </label>
                       <input 
                         type="text" 
                         className="custom-input"
                         style={{ flexGrow: 1, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
-                        placeholder="Or paste image URL..."
-                        value={image.startsWith('data:') ? 'Local Image Loaded' : image}
-                        disabled={image.startsWith('data:')}
+                        placeholder="Or paste image filename or URL..."
+                        value={image.startsWith('data:') ? 'Local Image (Stored Locally)' : image}
+                        disabled={image.startsWith('data:') || isUploadingImage}
                         onChange={(e) => setImage(e.target.value)}
                       />
                     </div>
+                    {imageUploadStatus && (
+                      <span style={{ 
+                        fontSize: '0.75rem', 
+                        color: 'var(--success)',
+                        lineHeight: '1.3'
+                      }}>
+                        {imageUploadStatus}
+                      </span>
+                    )}
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      Max size 2MB. Stored locally or synced in cloud.
+                      Images are optimized and stored locally in your browser storage.
                     </span>
                   </div>
                 </div>

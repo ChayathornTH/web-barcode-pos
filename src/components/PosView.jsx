@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ShoppingCart, Search, Volume2, VolumeX, Barcode, Plus, Minus, Trash2, Printer, CheckCircle, Grid } from 'lucide-react';
+import { getProductImageUrl } from '../utils/imageUtils';
+import { generatePromptPayQRDataUrl, calculateChangeBreakdown, getQuickCashSuggestions } from '../utils/paymentUtils';
 
 const CATEGORIES = ['All', 'Postcard', 'Photo card', 'Stickers', 'Books', 'Acrylics', 'Others'];
 
@@ -49,6 +51,8 @@ export default function PosView({
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' | 'qrpromptpay'
   const [cashTendered, setCashTendered] = useState('');
   const [promptPayId, setPromptPayId] = useState(localStorage.getItem('promptPayId') || '0812345678');
+  const [promptPayQrUrl, setPromptPayQrUrl] = useState('');
+  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   
   const manualInputRef = useRef(null);
   const audioCtxRef = useRef(null);
@@ -249,6 +253,35 @@ export default function PosView({
     setCashTendered('');
     setIsPaymentSelectionOpen(true);
   };
+
+  // Generate Offline PromptPay QR code whenever modal opens, total changes, or ID changes
+  useEffect(() => {
+    if (!isPaymentSelectionOpen || paymentMethod !== 'qrpromptpay') return;
+
+    let isMounted = true;
+    const cleanId = promptPayId.replace(/[^0-9]/g, '');
+    if (!cleanId) {
+      setPromptPayQrUrl('');
+      return;
+    }
+
+    setIsGeneratingQr(true);
+    generatePromptPayQRDataUrl(cleanId, total, { width: 280 })
+      .then((url) => {
+        if (isMounted) {
+          setPromptPayQrUrl(url);
+          setIsGeneratingQr(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to generate offline PromptPay QR:", err);
+        if (isMounted) setIsGeneratingQr(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isPaymentSelectionOpen, paymentMethod, promptPayId, total]);
 
   // Complete checkout after payment processing
   const handleCompletePayment = (method, cashVal) => {
@@ -647,25 +680,16 @@ export default function PosView({
                       }}
                       title={isOutOfStock ? "Out of stock" : `Tap to add: ${product.name}`}
                     >
-                      {!failedImages[product.id] ? (
+                      {!failedImages[`${product.id}_${product.image || ''}`] ? (
                         <div className="catalog-card-image-wrapper">
                           <img 
-                            src={(() => {
-                              let img = product.image ? product.image.trim() : '';
-                              if (!img) {
-                                return `/web-barcode-pos/product-images/${product.name}.png`;
-                              }
-                              if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) {
-                                return img;
-                              }
-                              if (!/\.(png|jpe?g|webp|gif)$/i.test(img)) {
-                                img += '.png';
-                              }
-                              return `/web-barcode-pos/product-images/${img}`;
-                            })()} 
+                            key={`${product.id}_${product.image || ''}`}
+                            src={getProductImageUrl(product.image, product.name, product.id)} 
                             alt={product.name} 
                             className="catalog-card-img" 
-                            onError={() => setFailedImages(prev => ({ ...prev, [product.id]: true }))}
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => setFailedImages(prev => ({ ...prev, [`${product.id}_${product.image || ''}`]: true }))}
                           />
                         </div>
                       ) : (
@@ -941,114 +965,175 @@ export default function PosView({
             {paymentMethod === 'cash' ? (
               <div>
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ fontSize: '0.8rem', marginBottom: '0.4rem', display: 'block', color: 'var(--text-secondary)' }}>
-                    Cash Received (฿)
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Cash Received (฿)
+                    </label>
+                    {cashTendered && (
+                      <button 
+                        type="button" 
+                        onClick={() => setCashTendered('')}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem', textDecoration: 'underline' }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                   <input 
                     type="number"
-                    step="1"
+                    step="any"
                     placeholder="Enter amount customer gave..."
                     className="custom-input"
-                    style={{ width: '100%', fontSize: '1.2rem', padding: '0.6rem 0.75rem', fontWeight: 700 }}
+                    style={{ width: '100%', fontSize: '1.4rem', padding: '0.6rem 0.75rem', fontWeight: 700 }}
                     value={cashTendered}
                     onChange={(e) => setCashTendered(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && cashTendered && parseFloat(cashTendered) >= total) {
+                        handleCompletePayment('cash', cashTendered);
+                      }
+                    }}
                     autoFocus
                   />
                 </div>
 
                 {/* Quick select cash shortcuts */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '1.25rem' }}>
-                  {/* Exact Amount */}
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary" 
-                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-                    onClick={() => setCashTendered(total.toFixed(0))}
-                  >
-                    Exact (฿{total.toFixed(0)})
-                  </button>
-                  
-                  {/* Next rounded amount */}
-                  {[
-                    Math.ceil(total / 10) * 10,
-                    Math.ceil(total / 50) * 50,
-                    Math.ceil(total / 100) * 100
-                  ].filter((v, idx, self) => v > total && self.indexOf(v) === idx).map(amt => (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    QUICK CASH SHORTCUTS
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                    {/* Exact Amount */}
                     <button 
-                      key={amt}
                       type="button" 
-                      className="btn btn-secondary" 
-                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-                      onClick={() => setCashTendered(amt.toString())}
+                      className={`btn ${cashTendered === total.toFixed(0) ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', fontWeight: 700 }}
+                      onClick={() => setCashTendered(total.toFixed(0))}
                     >
-                      ฿{amt}
+                      Exact (฿{total.toFixed(0)})
                     </button>
-                  ))}
+                    
+                    {/* Suggested bill presets */}
+                    {getQuickCashSuggestions(total).filter(amt => amt !== Math.ceil(total)).map(amt => (
+                      <button 
+                        key={amt}
+                        type="button" 
+                        className={`btn ${cashTendered === amt.toString() ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', fontWeight: 600 }}
+                        onClick={() => setCashTendered(amt.toString())}
+                      >
+                        ฿{amt}
+                      </button>
+                    ))}
+                  </div>
 
-                  {/* Standard bills */}
-                  {[100, 500, 1000].filter(bill => bill >= total).map(bill => (
-                    <button 
-                      key={bill}
-                      type="button" 
-                      className="btn btn-secondary" 
-                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-                      onClick={() => setCashTendered(bill.toString())}
-                    >
-                      ฿{bill} Bill
-                    </button>
-                  ))}
+                  {/* Incremental Add buttons (+20, +50, +100, +500) */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginRight: '0.15rem' }}>Add:</span>
+                    {[20, 50, 100, 500].map(addVal => (
+                      <button
+                        key={addVal}
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ flex: 1, padding: '0.25rem 0.4rem', fontSize: '0.75rem', opacity: 0.9 }}
+                        onClick={() => {
+                          const curr = parseFloat(cashTendered) || 0;
+                          setCashTendered((curr + addVal).toString());
+                        }}
+                      >
+                        +฿{addVal}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Change display */}
+                {/* Change calculation & denomination breakdown */}
                 {cashTendered && (
                   <div style={{ 
-                    padding: '0.75rem', 
-                    borderRadius: '6px', 
-                    background: parseFloat(cashTendered) >= total ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-                    border: parseFloat(cashTendered) >= total ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '1.25rem',
-                    fontWeight: 700
+                    padding: '1rem', 
+                    borderRadius: '8px', 
+                    background: parseFloat(cashTendered) >= total ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                    border: parseFloat(cashTendered) >= total ? '1px solid var(--success)' : '1px solid var(--danger)',
+                    marginBottom: '1.25rem'
                   }}>
-                    <span style={{ fontSize: '0.85rem', color: parseFloat(cashTendered) >= total ? 'var(--success)' : 'var(--danger)' }}>
-                      {parseFloat(cashTendered) >= total ? 'CHANGE TO GIVE:' : 'AMOUNT REMAINING:'}
-                    </span>
-                    <span style={{ fontSize: '1.4rem', color: parseFloat(cashTendered) >= total ? 'var(--success)' : 'var(--danger)' }}>
-                      ฿{Math.abs(parseFloat(cashTendered) - total).toFixed(2)}
-                    </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: parseFloat(cashTendered) >= total ? 'var(--success)' : 'var(--danger)' }}>
+                        {parseFloat(cashTendered) >= total ? '💵 CHANGE TO RETURN:' : '⚠️ AMOUNT REMAINING:'}
+                      </span>
+                      <span style={{ fontSize: '1.5rem', fontWeight: 800, color: parseFloat(cashTendered) >= total ? 'var(--success)' : 'var(--danger)' }}>
+                        ฿{Math.abs(parseFloat(cashTendered) - total).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {/* Quick Change Guide (Denomination Breakdown) */}
+                    {parseFloat(cashTendered) > total && (
+                      <div style={{ marginTop: '0.75rem', paddingTop: '0.6rem', borderTop: '1px dashed rgba(16, 185, 129, 0.3)' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', fontWeight: 600 }}>
+                          QUICK CHANGE GUIDE:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                          {calculateChangeBreakdown(parseFloat(cashTendered) - total).map((item, idx) => (
+                            <span 
+                              key={idx}
+                              style={{
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '4px',
+                                backgroundColor: 'rgba(0,0,0,0.3)',
+                                color: '#ffffff',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                borderLeft: `3px solid ${item.color}`
+                              }}
+                            >
+                              <span>{item.count}x</span>
+                              <span>{item.label}</span>
+                              <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>{item.name}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <button 
                   type="button"
                   className="btn btn-primary"
-                  style={{ width: '100%', padding: '0.8rem 0', fontSize: '1rem', fontWeight: 700 }}
+                  style={{ width: '100%', padding: '0.85rem 0', fontSize: '1.05rem', fontWeight: 700 }}
                   disabled={!cashTendered || parseFloat(cashTendered) < total}
                   onClick={() => handleCompletePayment('cash', cashTendered)}
                 >
-                  ✓ Complete Cash Sale
+                  ✓ Complete Cash Sale (฿{total.toFixed(2)})
                 </button>
               </div>
             ) : (
               <div>
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ fontSize: '0.8rem', marginBottom: '0.4rem', display: 'block', color: 'var(--text-secondary)' }}>
-                    PromptPay ID (Phone or Tax ID)
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      PromptPay ID (Mobile or Tax ID)
+                    </label>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 600 }}>
+                      ⚡ 100% Offline Generator
+                    </span>
+                  </div>
                   <input 
                     type="text"
                     placeholder="Enter phone e.g. 0812345678"
                     className="custom-input"
                     style={{ width: '100%', fontSize: '0.95rem', padding: '0.5rem 0.75rem' }}
                     value={promptPayId}
-                    onChange={(e) => setPromptPayId(e.target.value)}
+                    onChange={(e) => {
+                      setPromptPayId(e.target.value);
+                      localStorage.setItem('promptPayId', e.target.value);
+                    }}
                   />
                 </div>
 
-                {/* PromptPay QR Code container */}
-                {promptPayId.replace(/[^0-9]/g, '') && (
+                {/* PromptPay QR Code container (Generated 100% offline via EMVCo standard) */}
+                {promptPayId.replace(/[^0-9]/g, '') ? (
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -1057,10 +1142,10 @@ export default function PosView({
                     padding: '1rem',
                     borderRadius: '8px',
                     backgroundColor: '#ffffff',
-                    border: '3px solid #003a70', // Standard Thai PromptPay deep blue
+                    border: '3px solid #003a70',
                     marginBottom: '1.25rem'
                   }}>
-                    {/* PromptPay mini logo bar */}
+                    {/* Official Thai PromptPay header banner */}
                     <div style={{
                       backgroundColor: '#003a70',
                       color: '#ffffff',
@@ -1068,34 +1153,56 @@ export default function PosView({
                       textAlign: 'center',
                       fontWeight: 800,
                       fontSize: '0.75rem',
-                      padding: '0.2rem 0',
+                      padding: '0.35rem 0',
                       borderRadius: '4px',
-                      marginBottom: '0.5rem',
-                      letterSpacing: '0.05em'
+                      marginBottom: '0.6rem',
+                      letterSpacing: '0.08em',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      gap: '0.4rem'
                     }}>
-                      PROMPTPAY QR
+                      <span>THAI QR PAYMENT</span>
+                      <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem', backgroundColor: '#ffffff', color: '#003a70', borderRadius: '3px' }}>PROMPTPAY</span>
                     </div>
                     
-                    <img 
-                      src={`https://promptpay.io/${promptPayId.replace(/[^0-9]/g, '')}/${total.toFixed(2)}.png`}
-                      alt="PromptPay QR Code"
-                      style={{ width: '180px', height: '180px', display: 'block' }}
-                    />
+                    {isGeneratingQr ? (
+                      <div style={{ width: '200px', height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#003a70', fontSize: '0.85rem' }}>
+                        Generating Offline QR...
+                      </div>
+                    ) : promptPayQrUrl ? (
+                      <img 
+                        src={promptPayQrUrl}
+                        alt="PromptPay QR Code"
+                        style={{ width: '200px', height: '200px', display: 'block' }}
+                      />
+                    ) : (
+                      <div style={{ padding: '1rem', color: '#64748b', fontSize: '0.8rem' }}>
+                        Could not generate QR code.
+                      </div>
+                    )}
                     
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#003a70', marginTop: '0.5rem', textAlign: 'center', fontWeight: 800 }}>
                       Scan to pay <strong>฿{total.toFixed(2)}</strong>
                     </div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>
+                      PromptPay: {promptPayId} • Works without internet
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--warning)', backgroundColor: 'rgba(234, 179, 8, 0.1)', borderRadius: '6px', marginBottom: '1.25rem', fontSize: '0.85rem' }}>
+                    ⚠️ Please enter a PromptPay phone or Tax ID above to generate the QR code.
                   </div>
                 )}
 
                 <button 
                   type="button"
                   className="btn btn-primary"
-                  style={{ width: '100%', padding: '0.8rem 0', fontSize: '1rem', fontWeight: 700 }}
+                  style={{ width: '100%', padding: '0.85rem 0', fontSize: '1rem', fontWeight: 700 }}
                   disabled={!promptPayId.replace(/[^0-9]/g, '')}
                   onClick={() => handleCompletePayment('qrpromptpay')}
                 >
-                  ✓ Confirm Payment Received
+                  ✓ Confirm Payment Received (฿{total.toFixed(2)})
                 </button>
               </div>
             )}

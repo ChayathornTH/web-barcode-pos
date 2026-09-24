@@ -3,7 +3,7 @@ import { DEFAULT_PRODUCTS } from './data/mockProducts';
 import PosView from './components/PosView';
 import InventoryView from './components/InventoryView';
 import DashboardView from './components/DashboardView';
-import { ShoppingCart, Database, LayoutDashboard, Settings, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Database, LayoutDashboard, Settings, AlertCircle, CheckCircle, RefreshCw, Tablet, Download, Share2, X } from 'lucide-react';
 import { 
   subscribeToProducts,
   subscribeToSalesHistory, 
@@ -216,6 +216,52 @@ export default function App() {
   // UI States
   const [lastScannedItem, setLastScannedItem] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [cloudSyncError, setCloudSyncError] = useState(null);
+
+  // iPad & PWA Standalone App States
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(() => {
+    return (
+      (typeof window !== 'undefined' && window.navigator?.standalone === true) ||
+      (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+    );
+  });
+
+  useEffect(() => {
+    const checkStandalone = () => {
+      const standalone = 
+        window.navigator?.standalone === true ||
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      setIsStandalone(standalone);
+    };
+
+    window.addEventListener('resize', checkStandalone);
+
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => {
+      window.removeEventListener('resize', checkStandalone);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        addToast('OmniScan installed successfully!', 'success');
+      }
+    } else {
+      setShowInstallGuide(true);
+    }
+  };
 
   // Floating Toast Notification Helper
   const addToast = (message, type = 'info') => {
@@ -228,9 +274,14 @@ export default function App() {
     }, 3500);
   };
 
-  // Load products dynamically from public/products.csv on mount
+  // Load products dynamically from public/products.csv on initial setup (only if no booth and no saved products)
   useEffect(() => {
     const loadProductsFromCSV = async () => {
+      // Don't auto-fetch if connected to cloud booth or if inventory has already been initialized/cleared
+      if (localStorage.getItem('pos_booth_id') || localStorage.getItem('pos_products') !== null) {
+        return;
+      }
+
       try {
         const githubUrl = "https://raw.githubusercontent.com/ChayathornTH/web-barcode-pos/main/public/products.csv";
         const basePath = import.meta.env.BASE_URL || '/';
@@ -292,40 +343,38 @@ export default function App() {
 
   // Real-time Cloud DB Synchronization Hook
   useEffect(() => {
-    if (!boothId) return;
+    if (!boothId) {
+      setCloudSyncError(null);
+      return;
+    }
 
     const timer = setTimeout(() => {
       addToast(`Syncing with cloud booth: "${boothId}"`, 'info');
     }, 0);
     
-    let hasCheckedInitial = false;
-    
-    // Subscribe to products sub-collection (with auto-seeding if empty on cloud)
+    // Subscribe to products sub-collection
     const unsubscribeProds = subscribeToProducts(boothId, (items) => {
-      if (items.length === 0) {
-        if (!hasCheckedInitial) {
-          hasCheckedInitial = true;
-          setProducts(prevProducts => {
-            if (prevProducts.length > 0) {
-              addToast("Cloud booth is empty. Syncing and seeding catalog from products.csv...", "info");
-              prevProducts.forEach(p => {
-                addProductRecord(boothId, p);
-              });
-            }
-            return prevProducts;
-          });
-        } else {
-          setProducts([]);
-        }
+      setCloudSyncError(null);
+      setProducts(normalizeProducts(items));
+    }, (error) => {
+      console.error("Firestore Products subscription error:", error);
+      if (error.code === 'permission-denied') {
+        setCloudSyncError("Firebase Permission Denied: Firestore Security Rules expired. Please update rules in Firebase Console.");
+        addToast("Firebase permission denied! Please update Firestore Security Rules in Firebase Console.", "error");
       } else {
-        hasCheckedInitial = true;
-        setProducts(normalizeProducts(items));
+        setCloudSyncError(error.message);
+        addToast(`Firebase sync error: ${error.message}`, "error");
       }
     });
 
     // Subscribe to sales sub-collection
     const unsubscribeSales = subscribeToSalesHistory(boothId, (history) => {
       setSalesHistory(history);
+    }, (error) => {
+      console.error("Firestore Sales subscription error:", error);
+      if (error.code === 'permission-denied') {
+        setCloudSyncError("Firebase Permission Denied: Firestore Security Rules expired.");
+      }
     });
 
     return () => {
@@ -442,7 +491,7 @@ export default function App() {
   }, [handleScanEvent]);
 
   // Inventory Management Actions
-  const handleAddProduct = (newProd) => {
+  const handleAddProduct = async (newProd) => {
     let finalProd = { ...newProd };
     if (newProd.isSetPriced && newProd.setGroupName) {
       const matchingGroupProd = products.find(p => p.isSetPriced && p.setGroupName === newProd.setGroupName);
@@ -451,14 +500,26 @@ export default function App() {
       }
     }
 
+    const updatedList = [finalProd, ...products];
+    setProducts(updatedList);
+    localStorage.setItem('pos_products', JSON.stringify(updatedList));
+
     if (boothId) {
-      addProductRecord(boothId, finalProd);
+      try {
+        await addProductRecord(boothId, finalProd);
+        addToast(`Registered "${finalProd.name}" in cloud inventory catalog.`, 'success');
+      } catch (err) {
+        console.error("Add product Firestore error:", err);
+        addToast(
+          err.code === 'permission-denied'
+            ? 'Firebase permission denied! Please update Firestore Security Rules in Firebase Console.'
+            : `Failed to save product to cloud: ${err.message}`,
+          'error'
+        );
+      }
     } else {
-      const updatedList = [finalProd, ...products];
-      setProducts(updatedList);
-      localStorage.setItem('pos_products', JSON.stringify(updatedList));
+      addToast(`Registered "${finalProd.name}" in inventory catalog.`, 'success');
     }
-    addToast(`Registered "${finalProd.name}" in inventory catalog.`, 'success');
   };
 
   const handleUpdateProduct = async (updatedProd) => {
@@ -514,31 +575,50 @@ export default function App() {
       }
     }
 
-    // Update state/sync
+    // Always update local state immediately so UI and image update with zero delay
+    setProducts(updatedList);
+    localStorage.setItem('pos_products', JSON.stringify(updatedList));
+
+    // Update cloud sync
     if (boothId) {
-      for (const p of updatedList) {
-        const current = products.find(curr => curr.id === p.id);
-        if (JSON.stringify(current) !== JSON.stringify(p)) {
-          addProductRecord(boothId, p);
+      try {
+        for (const p of updatedList) {
+          const current = products.find(curr => curr.id === p.id);
+          if (JSON.stringify(current) !== JSON.stringify(p)) {
+            await addProductRecord(boothId, p);
+          }
         }
+        addToast(`Updated product: ${updatedProd.name} in cloud.`, 'info');
+      } catch (err) {
+        console.error("Update product Firestore error:", err);
+        addToast(
+          err.code === 'permission-denied'
+            ? 'Firebase permission denied! Please update Firestore Security Rules in Firebase Console.'
+            : `Failed to update cloud product: ${err.message}`,
+          'error'
+        );
       }
     } else {
-      setProducts(updatedList);
-      localStorage.setItem('pos_products', JSON.stringify(updatedList));
+      addToast(`Updated product: ${updatedProd.name} and synced group settings.`, 'info');
     }
-    addToast(`Updated product: ${updatedProd.name} and synced group settings.`, 'info');
   };
 
-  const handleDeleteProduct = (id) => {
+  const handleDeleteProduct = async (id) => {
     const prod = products.find(p => p.id === id);
     if (boothId) {
-      deleteProductRecord(boothId, id);
+      try {
+        await deleteProductRecord(boothId, id);
+        addToast(`Deleted "${prod?.name || 'product'}" from cloud.`, 'warning');
+      } catch (err) {
+        console.error("Delete product Firestore error:", err);
+        addToast(`Failed to delete product from cloud: ${err.message}`, 'error');
+      }
     } else {
       const updatedList = products.filter(p => p.id !== id);
       setProducts(updatedList);
       localStorage.setItem('pos_products', JSON.stringify(updatedList));
+      addToast(`Deleted "${prod?.name || 'product'}" from database.`, 'warning');
     }
-    addToast(`Deleted "${prod?.name || 'product'}" from database.`, 'warning');
   };
 
   const handleImportProducts = async (importedProds, overwrite = false) => {
@@ -636,6 +716,22 @@ export default function App() {
           setProducts(DEFAULT_PRODUCTS);
           localStorage.setItem('pos_products', JSON.stringify(DEFAULT_PRODUCTS));
         }
+      }
+    }
+  };
+
+  const handleClearInventory = async () => {
+    if (window.confirm("Are you sure you want to clear ALL products from the inventory? This will permanently delete all items in this catalog.")) {
+      try {
+        if (boothId) {
+          await resetInventoryFirebase(boothId);
+        }
+        setProducts([]);
+        localStorage.setItem('pos_products', JSON.stringify([]));
+        addToast("All products have been cleared from inventory.", "info");
+      } catch (err) {
+        console.error("Error clearing inventory:", err);
+        addToast(`Failed to clear inventory: ${err.message}`, "error");
       }
     }
   };
@@ -807,6 +903,20 @@ export default function App() {
             <Settings size={18} />
             <span>Cloud Sync</span>
           </button>
+
+          <button 
+            className="btn btn-secondary"
+            style={{
+              ...styles.navBtn,
+              borderColor: isStandalone ? 'rgba(16, 185, 129, 0.4)' : 'rgba(139, 92, 246, 0.4)',
+              background: isStandalone ? 'rgba(16, 185, 129, 0.1)' : 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(6, 182, 212, 0.15))'
+            }}
+            onClick={isStandalone ? () => addToast('Already running in standalone iPad app mode!', 'success') : handleInstallClick}
+            title={isStandalone ? 'Running in iPad App Mode' : 'Add OmniScan to Home Screen'}
+          >
+            <Tablet size={18} color={isStandalone ? 'var(--success)' : 'var(--accent)'} />
+            <span>{isStandalone ? 'iPad App Mode' : (deferredPrompt ? 'Install App' : 'Add to Home')}</span>
+          </button>
         </nav>
 
         {/* Global Wedge Active status indicator */}
@@ -844,11 +954,13 @@ export default function App() {
         {activeView === 'inventory' && (
           <InventoryView 
             products={products}
+            boothId={boothId}
             onAddProduct={handleAddProduct}
             onUpdateProduct={handleUpdateProduct}
             onDeleteProduct={handleDeleteProduct}
             onSimulateScan={handleScanEvent}
             onResetInventory={handleResetInventory}
+            onClearInventory={handleClearInventory}
             onImportProducts={handleImportProducts}
           />
         )}
@@ -863,24 +975,48 @@ export default function App() {
         {activeView === 'settings' && (
           <div className="glass-panel" style={{ padding: '2rem', maxWidth: '500px', margin: '0 auto' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', fontFamily: 'var(--font-heading)' }}>
-              <Settings color="var(--primary)" /> Cloud Synchronization
+              <Settings color="var(--primary)" /> Cloud Synchronization & Storage
             </h2>
             
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.4' }}>
-              Synchronize your product catalog, pricing, stock levels, and sales history across multiple devices (PC and phones) in real-time.
+              Synchronize your product catalog, pricing, stock levels, images, and sales history across multiple devices (PC and phones) in real-time.
             </p>
+
+            {cloudSyncError && (
+              <div style={{
+                padding: '1rem',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid var(--danger)',
+                color: '#fca5a5',
+                fontSize: '0.85rem',
+                marginBottom: '1.25rem',
+                lineHeight: '1.4'
+              }}>
+                <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.35rem' }}>
+                  <AlertCircle size={16} color="var(--danger)" /> Firebase Permission Denied
+                </div>
+                <p style={{ fontSize: '0.8rem', opacity: 0.95 }}>
+                  Your Firebase 30-day Test Mode Security Rules have expired.
+                </p>
+                <div style={{ marginTop: '0.5rem', padding: '0.5rem', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: '4px', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                  Go to Firebase Console &gt; Firestore Database &gt; Rules<br />
+                  Set: <code>allow read, write: if true;</code> and click Publish.
+                </div>
+              </div>
+            )}
 
             <div className="glass-panel" style={{ padding: '1.25rem', background: 'rgba(0,0,0,0.15)', marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <span className={boothId ? "pulse-primary" : ""} style={{
+                <span className={boothId ? (cloudSyncError ? "" : "pulse-primary") : ""} style={{
                   width: '8px',
                   height: '8px',
                   borderRadius: '50%',
-                  backgroundColor: boothId ? 'var(--success)' : 'var(--warning)',
+                  backgroundColor: !boothId ? 'var(--warning)' : (cloudSyncError ? 'var(--danger)' : 'var(--success)'),
                   display: 'inline-block'
                 }}></span>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: boothId ? 'var(--success)' : 'var(--warning)' }}>
-                  {boothId ? 'CLOUD STORAGE ACTIVE (ONLINE)' : 'LOCAL OFFLINE STORAGE'}
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: !boothId ? 'var(--warning)' : (cloudSyncError ? 'var(--danger)' : 'var(--success)') }}>
+                  {!boothId ? 'LOCAL OFFLINE STORAGE' : (cloudSyncError ? 'FIREBASE PERMISSION ERROR' : 'CLOUD SYNC ACTIVE (ONLINE)')}
                 </span>
               </div>
 
@@ -896,7 +1032,7 @@ export default function App() {
               ) : (
                 <div>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: '1.4' }}>
-                    Enter a shared Booth ID code (e.g. <code>ARTBOOTH12</code>) to sync. Multiple devices using the same code share databases instantly!
+                    Enter a shared Booth ID code (e.g. <code>BOOTHSUAY</code>) to sync. Multiple devices using the same code share databases instantly!
                   </p>
                   <form onSubmit={handleConnectBooth} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <input
@@ -913,6 +1049,22 @@ export default function App() {
                   </form>
                 </div>
               )}
+            </div>
+
+            <div style={{
+              padding: '0.85rem',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(99, 102, 241, 0.1)',
+              border: '1px solid rgba(99, 102, 241, 0.25)',
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              lineHeight: '1.4',
+              marginBottom: '1rem'
+            }}>
+              <strong style={{ color: 'var(--accent)' }}>Firebase Storage (Image Hosting):</strong>
+              <p style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
+                To upload product photos directly to Firebase Storage, activate Storage in your Firebase Console (<strong>Build &gt; Storage &gt; Get started</strong>). If Storage is not active, local image compression is automatically used.
+              </p>
             </div>
 
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
@@ -946,6 +1098,181 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {/* iPad / PWA Install Guide Modal */}
+      {showInstallGuide && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: '1rem',
+        }}>
+          <div className="glass-panel" style={{
+            maxWidth: '500px',
+            width: '100%',
+            backgroundColor: 'rgba(15, 19, 31, 0.98)',
+            border: '1px solid rgba(139, 92, 246, 0.4)',
+            borderRadius: '16px',
+            padding: '1.75rem',
+            position: 'relative',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+            animation: 'slideIn 0.25s ease-out'
+          }}>
+            <button
+              onClick={() => setShowInstallGuide(false)}
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '0.4rem',
+                borderRadius: '6px'
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, var(--primary), var(--accent))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.4rem'
+              }}>
+                ⚡
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.15rem', color: '#fff', margin: 0 }}>Install OmniScan on iPad</h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  Run fullscreen like a native app without Safari bars
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', margin: '1.5rem 0' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.85rem',
+                padding: '0.85rem',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--primary)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>1</div>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    Tap Safari's <strong>Share</strong> button <Share2 size={16} color="var(--accent)" />
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                    At the top of Safari on your iPad, tap the square icon with an arrow pointing up.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.85rem',
+                padding: '0.85rem',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--primary)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>2</div>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+                    Select <strong>"Add to Home Screen"</strong>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                    In the share sheet, scroll down and tap the option with the plus (+) icon.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.85rem',
+                padding: '0.85rem',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--primary)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>3</div>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+                    Tap <strong>"Add"</strong> & Launch
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                    Tap Add in the top-right corner. Now open OmniScan from your iPad home screen to run in standalone app mode!
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              onClick={() => setShowInstallGuide(false)}
+            >
+              Got it!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
