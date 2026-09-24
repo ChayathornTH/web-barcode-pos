@@ -46,10 +46,14 @@ const normalizeProducts = (items) => {
       });
       return {
         ...p,
+        tag: p.tag || p.series || p.fandom || '',
         setTiers: normalizedTiers
       };
     }
-    return p;
+    return {
+      ...p,
+      tag: p.tag || p.series || p.fandom || ''
+    };
   });
 };
 
@@ -131,6 +135,7 @@ const parseCSVProducts = (text) => {
       else if (key === 'category') product.category = val || 'Others';
       else if (key === 'stock') product.stock = parseInt(val) || 0;
       else if (key === 'artist' || key === 'owner') product.artist = val || 'Unknown';
+      else if (key === 'tag' || key === 'tags' || key === 'series' || key === 'fandom') product.tag = val;
       else if (key === 'emoji') product.emoji = val || '📦';
       else if (key === 'image') product.image = val;
       else if (key === 'description') product.description = val;

@@ -24,6 +24,7 @@ export default function PosView({
   const [failedImages, setFailedImages] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedArtist, setSelectedArtist] = useState('All');
+  const [selectedTag, setSelectedTag] = useState('All');
   const [showInStockOnly, setShowInStockOnly] = useState(false);
   const [showSetOnly, setShowSetOnly] = useState(false);
   const [sortBy, setSortBy] = useState('default');
@@ -335,18 +336,35 @@ export default function PosView({
     return Array.from(new Set(products.map(p => p.artist || 'Unknown').filter(Boolean))).sort();
   }, [products]);
 
+  const uniqueTags = useMemo(() => {
+    const set = new Set();
+    products.forEach(p => {
+      if (p.tag && p.tag.trim()) {
+        p.tag.split(',').forEach(t => {
+          const trimmed = t.trim();
+          if (trimmed) set.add(trimmed);
+        });
+      }
+    });
+    return Array.from(set).sort();
+  }, [products]);
+
   // Filter and sort catalog products
   const filteredCatalogProducts = useMemo(() => {
     let items = products.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || 
-                            p.artist?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-                            p.description?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-                            p.barcode.includes(catalogSearch);
+      const term = catalogSearch.toLowerCase().trim();
+      const matchesSearch = !term ||
+                            p.name.toLowerCase().includes(term) || 
+                            p.artist?.toLowerCase().includes(term) ||
+                            (p.tag && p.tag.toLowerCase().includes(term)) ||
+                            p.description?.toLowerCase().includes(term) ||
+                            p.barcode.includes(term);
       const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
       const matchesArtist = selectedArtist === 'All' || (p.artist || 'Unknown') === selectedArtist;
+      const matchesTag = selectedTag === 'All' || (p.tag && p.tag.toLowerCase().includes(selectedTag.toLowerCase()));
       const matchesStock = !showInStockOnly || p.stock > 0;
       const matchesSet = !showSetOnly || p.isSetPriced;
-      return matchesSearch && matchesCategory && matchesArtist && matchesStock && matchesSet;
+      return matchesSearch && matchesCategory && matchesArtist && matchesTag && matchesStock && matchesSet;
     });
 
     if (sortBy === 'price-asc') {
@@ -378,7 +396,7 @@ export default function PosView({
       });
     }
     return items;
-  }, [products, catalogSearch, selectedCategory, selectedArtist, showInStockOnly, showSetOnly, sortBy]);
+  }, [products, catalogSearch, selectedCategory, selectedArtist, selectedTag, showInStockOnly, showSetOnly, sortBy]);
 
   const renderCartItem = (item) => (
     <div key={item.id} className="item-row cart-row">
@@ -502,12 +520,12 @@ export default function PosView({
             
             {/* Search & Category Filter Section */}
             <div style={styles.searchFilterBlock}>
-              <div style={{ display: 'flex', gap: '0.5rem', width: '100%', alignItems: 'center' }}>
-                <div style={{ ...styles.searchWrapper, flexGrow: 1, marginBottom: 0 }}>
+              <div style={{ display: 'flex', gap: '0.5rem', width: '100%', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ ...styles.searchWrapper, flexGrow: 1, minWidth: '180px', marginBottom: 0 }}>
                   <Search size={18} style={styles.searchIcon} />
                   <input 
                     type="text" 
-                    placeholder="Search art pieces, catalog, artists..." 
+                    placeholder="Search art pieces, series, tags, artists..." 
                     className="custom-input"
                     style={{ ...styles.searchInput, width: '100%' }}
                     value={catalogSearch}
@@ -518,11 +536,22 @@ export default function PosView({
                   value={selectedArtist}
                   onChange={(e) => setSelectedArtist(e.target.value)}
                   className="custom-input"
-                  style={{ width: '150px', flexShrink: 0, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                  style={{ width: '140px', flexShrink: 0, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
                 >
                   <option value="All">All Artists</option>
                   {uniqueArtists.map(art => (
                     <option key={art} value={art}>{art}</option>
+                  ))}
+                </select>
+                <select
+                  value={selectedTag}
+                  onChange={(e) => setSelectedTag(e.target.value)}
+                  className="custom-input"
+                  style={{ width: '140px', flexShrink: 0, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                >
+                  <option value="All">All Series / Tags</option>
+                  {uniqueTags.map(t => (
+                    <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </div>
@@ -584,13 +613,14 @@ export default function PosView({
                   🏷️ Bulk Promo Only
                 </button>
 
-                {(catalogSearch || selectedCategory !== 'All' || selectedArtist !== 'All' || showInStockOnly || showSetOnly || sortBy !== 'default') && (
+                {(catalogSearch || selectedCategory !== 'All' || selectedArtist !== 'All' || selectedTag !== 'All' || showInStockOnly || showSetOnly || sortBy !== 'default') && (
                   <button
                     type="button"
                     onClick={() => {
                       setCatalogSearch('');
                       setSelectedCategory('All');
                       setSelectedArtist('All');
+                      setSelectedTag('All');
                       setShowInStockOnly(false);
                       setShowSetOnly(false);
                       setSortBy('default');
@@ -705,6 +735,25 @@ export default function PosView({
                       }}>
                         🎨 {product.artist || "Unknown"}
                       </div>
+
+                      {product.tag && (
+                        <div style={{
+                          fontSize: '0.65rem',
+                          fontWeight: 600,
+                          color: 'var(--accent)',
+                          background: 'rgba(139, 92, 246, 0.1)',
+                          border: '1px solid rgba(139, 92, 246, 0.25)',
+                          borderRadius: '4px',
+                          padding: '0.1rem 0.35rem',
+                          marginTop: '0.2rem',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: '100%'
+                        }} title={`Series / Tag: ${product.tag}`}>
+                          🏷️ {product.tag}
+                        </div>
+                      )}
                       
                       {product.isSetPriced && (
                         <div className="catalog-card-set-tag" style={{

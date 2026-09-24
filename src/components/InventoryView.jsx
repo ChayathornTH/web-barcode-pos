@@ -90,11 +90,13 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
   const groupNames = Object.keys(availableGroups);
 
   const [selectedArtist, setSelectedArtist] = useState('All');
+  const [selectedTag, setSelectedTag] = useState('All');
 
   // Form State
   const [barcode, setBarcode] = useState('');
   const [name, setName] = useState('');
   const [artist, setArtist] = useState('');
+  const [tag, setTag] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('Others');
   const [stock, setStock] = useState('');
@@ -125,6 +127,7 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
 
     setName(`${product.name} (Copy)`);
     setArtist(product.artist || '');
+    setTag(product.tag || '');
     setPrice(product.price.toString());
     setCategory(product.category);
     setStock(product.stock.toString());
@@ -245,6 +248,7 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
         else if (header === 'category') p.category = normalizeCategoryName(val);
         else if (header === 'stock') p.stock = parseInt(val);
         else if (header === 'artist' || header === 'owner') p.artist = val;
+        else if (header === 'tag' || header === 'tags' || header === 'series' || header === 'fandom') p.tag = val;
         else if (header === 'emoji') p.emoji = val;
         else if (header === 'image') p.image = val;
         else if (header === 'description') p.description = val;
@@ -384,7 +388,7 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
   };
 
   const handleExportCSV = () => {
-    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName", "SET1_QTY", "SET1_Price", "SET2_QTY", "SET2_Price", "SET3_QTY", "SET3_Price"];
+    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Tag", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName", "SET1_QTY", "SET1_Price", "SET2_QTY", "SET2_Price", "SET3_QTY", "SET3_Price"];
     const rows = products.map(p => {
       let tiers = p.setTiers;
       if (typeof tiers === 'string') {
@@ -403,6 +407,7 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
         p.category || 'Other',
         p.stock || 0,
         `"${(p.artist || 'Unknown').replace(/"/g, '""')}"`,
+        `"${(p.tag || '').replace(/"/g, '""')}"`,
         p.emoji || '📦',
         p.image || '',
         `"${(p.description || '').replace(/"/g, '""')}"`,
@@ -430,10 +435,10 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName", "SET1_QTY", "SET1_Price", "SET2_QTY", "SET2_Price", "SET3_QTY", "SET3_Price"];
+    const headers = ["Barcode", "Name", "Price", "Category", "Stock", "Artist", "Tag", "Emoji", "Image", "Description", "IsSetPriced", "SetGroupName", "SET1_QTY", "SET1_Price", "SET2_QTY", "SET2_Price", "SET3_QTY", "SET3_Price"];
     const sampleRows = [
-      ["8850125000114", "Cozy Coffee Shop Print", "15.00", "Prints", "25", "Bob", "☕", "", "Warm-toned illustration print", "FALSE", "", "", "", "", "", "", ""],
-      ["3001", "Holographic Sticker Pack", "12.00", "Stickers", "50", "Charlie", "✨", "", "Waterproof die-cut stickers", "TRUE", "Stickers", "2", "20.00", "5", "45.00", "", ""]
+      ["8850125000114", "Cozy Coffee Shop Print", "15.00", "Prints", "25", "Bob", "Original", "☕", "", "Warm-toned illustration print", "FALSE", "", "", "", "", "", "", ""],
+      ["3001", "Holographic Sticker Pack", "12.00", "Stickers", "50", "Charlie", "Harry Potter", "✨", "", "Waterproof die-cut stickers", "TRUE", "Stickers", "2", "20.00", "5", "45.00", "", ""]
     ].map(row => row.join(','));
     
     const csvContent = [headers.join(','), ...sampleRows].join('\n');
@@ -455,6 +460,7 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
     setBarcode(product.barcode);
     setName(product.name);
     setArtist(product.artist || '');
+    setTag(product.tag || '');
     setPrice(product.price.toString());
     setCategory(product.category);
     setStock(product.stock.toString());
@@ -508,6 +514,7 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
     setSetGroupName('');
     setGroupSelectValue('');
     setArtist('');
+    setTag('');
     setTier1Qty('1');
     setTier1Price('');
     setTier2Qty('');
@@ -657,6 +664,7 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
         category: normalizedCategory,
         stock: stockNum,
         artist: artist.trim(),
+        tag: tag.trim(),
         description,
         emoji,
         image,
@@ -674,6 +682,7 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
         category: normalizedCategory,
         stock: stockNum,
         artist: artist.trim(),
+        tag: tag.trim(),
         description,
         emoji,
         image,
@@ -688,15 +697,32 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
 
   const uniqueArtists = Array.from(new Set(products.map(p => p.artist || 'Unknown').filter(Boolean))).sort();
 
+  const uniqueTags = useMemo(() => {
+    const set = new Set();
+    products.forEach(p => {
+      if (p.tag && p.tag.trim()) {
+        p.tag.split(',').forEach(t => {
+          const trimmed = t.trim();
+          if (trimmed) set.add(trimmed);
+        });
+      }
+    });
+    return Array.from(set).sort();
+  }, [products]);
+
   // Filter products and sort so items in the same group are next to each other
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.barcode.includes(searchTerm) || 
-                          p.artist?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase().trim();
+    const matchesSearch = !term ||
+                          p.name.toLowerCase().includes(term) || 
+                          p.barcode.includes(term) || 
+                          p.artist?.toLowerCase().includes(term) ||
+                          p.category.toLowerCase().includes(term) ||
+                          (p.tag && p.tag.toLowerCase().includes(term));
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     const matchesArtist = selectedArtist === 'All' || (p.artist || 'Unknown') === selectedArtist;
-    return matchesSearch && matchesCategory && matchesArtist;
+    const matchesTag = selectedTag === 'All' || (p.tag && p.tag.toLowerCase().includes(selectedTag.toLowerCase()));
+    return matchesSearch && matchesCategory && matchesArtist && matchesTag;
   }).sort((a, b) => {
     const aGroup = (a.isSetPriced && a.setGroupName) ? a.setGroupName.trim().toLowerCase() : '';
     const bGroup = (b.isSetPriced && b.setGroupName) ? b.setGroupName.trim().toLowerCase() : '';
@@ -806,6 +832,19 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
               ))}
             </select>
           </div>
+          <div style={styles.categorySelectWrapper}>
+            <select 
+              value={selectedTag} 
+              onChange={(e) => setSelectedTag(e.target.value)}
+              className="custom-input"
+              style={styles.categorySelect}
+            >
+              <option value="All">All Series / Tags</option>
+              {uniqueTags.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -857,8 +896,23 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
                     )}
                   </div>
                   <h4 style={styles.productName}>{product.name}</h4>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600, marginTop: '0.15rem' }}>
-                    🎨 {product.artist || "Unknown"}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
+                      🎨 {product.artist || "Unknown"}
+                    </span>
+                    {product.tag && (
+                      <span style={{
+                        fontSize: '0.7rem',
+                        padding: '0.1rem 0.45rem',
+                        borderRadius: '4px',
+                        backgroundColor: 'rgba(139, 92, 246, 0.12)',
+                        color: 'var(--accent)',
+                        border: '1px solid rgba(139, 92, 246, 0.25)',
+                        fontWeight: 600
+                      }}>
+                        🏷️ {product.tag}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1056,6 +1110,26 @@ export default function InventoryView({ products, boothId = '', onAddProduct, on
                     required
                   />
                 </div>
+              </div>
+
+              <div style={{ ...styles.formGroup, marginBottom: '1rem' }}>
+                <label style={styles.formLabel}>
+                  Series / Fandom Tag <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>(Optional - e.g. Harry Potter, Rick and Morty)</span>
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Harry Potter, Rick and Morty, Original..." 
+                  className="custom-input"
+                  value={tag}
+                  onChange={(e) => setTag(e.target.value)}
+                  list="inventory-tag-suggestions"
+                  style={{ width: '100%' }}
+                />
+                <datalist id="inventory-tag-suggestions">
+                  {uniqueTags.map(t => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', padding: '0.5rem', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
