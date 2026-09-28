@@ -814,7 +814,7 @@ export default function PosView({
 
         {/* Right Side: Cart Summary Panel */}
         <div className="pos-right-col">
-          <div className="glass-panel" style={styles.cartCard}>
+          <div className="glass-panel cart-card" style={styles.cartCard}>
             <h3 style={styles.cardTitle}>
               <ShoppingCart size={18} color="var(--primary)" /> Shopping Cart ({cart.reduce((s, i) => s + i.quantity, 0)})
             </h3>
@@ -826,7 +826,7 @@ export default function PosView({
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.2rem' }}>Tap products in the catalog to add items.</p>
               </div>
             ) : (
-              <div style={styles.cartList}>
+              <div className="cart-list" style={styles.cartList}>
                 {/* Render Promo Groups */}
                 {Object.values(promoGroupsMap).map((group) => (
                   <div key={group.groupName} style={{ marginBottom: '1.25rem' }}>
@@ -1577,7 +1577,6 @@ const styles = {
   },
   cartCard: {
     padding: '1.25rem',
-    minHeight: '480px',
     display: 'flex',
     flexDirection: 'column',
   },
@@ -1594,7 +1593,6 @@ const styles = {
     flexDirection: 'column',
     gap: '0.75rem',
     marginTop: '0.5rem',
-    maxHeight: '300px',
     overflowY: 'auto',
     paddingRight: '4px',
   },

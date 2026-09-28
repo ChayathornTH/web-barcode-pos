@@ -185,8 +185,19 @@ h1, h2, h3, h4, h5, h6 {
 
 .pos-right-col {
   position: sticky;
-  top: 2rem;
+  top: 1.5rem;
   z-index: 10;
+}
+
+.cart-card {
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cart-list {
+  max-height: clamp(240px, 42vh, 380px);
+  overflow-y: auto;
 }
 
 /* Charts Grid */
@@ -392,13 +403,30 @@ h1, h2, h3, h4, h5, h6 {
     overflow-y: visible;
   }
 
+  /* Ensure POS Checkout column stays on the right on tablets & iPads */
   .pos-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr clamp(300px, 34vw, 360px);
     gap: 1.25rem;
+    align-items: start;
   }
 
   .pos-right-col {
-    position: static;
+    position: sticky;
+    top: 5.5rem;
+    z-index: 10;
+  }
+
+  .cart-card {
+    min-height: 420px;
+  }
+
+  .cart-list {
+    max-height: clamp(220px, 38vh, 320px);
+  }
+
+  .catalog-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.85rem;
   }
 
   .charts-grid {
@@ -478,9 +506,34 @@ h1, h2, h3, h4, h5, h6 {
     text-align: right;
   }
 
-  /* Mobile Tabs View Toggle Activation */
+  /* Mobile Tabs View Toggle Activation (Single Column on Phone) */
   .mobile-view-tabs {
     display: grid;
+    position: sticky;
+    top: 52px;
+    z-index: 30;
+    background: rgba(10, 14, 23, 0.94);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 0.5rem 0;
+    margin-bottom: 0.75rem;
+  }
+
+  .pos-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .pos-right-col {
+    position: static;
+  }
+
+  .cart-card {
+    min-height: auto !important;
+  }
+
+  .cart-list {
+    max-height: 360px;
   }
 
   /* Dynamic display based on tab selection */
